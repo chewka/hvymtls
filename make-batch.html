@@ -1,0 +1,236 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>ICP-MS Sample List Builder</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{--tw:#fde2e1;--bg:#fff;--fg:#1f2328;--mut:#6b7280;--line:#d8dce1;--card:#f6f7f9;--acc:#2f6fdb;--qc:#e2efda;--smp:#eaf3fb;--err:#b42318;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--tw:#4a1f1f;--bg:#16181d;--fg:#e6e8eb;--mut:#9aa1ab;--line:#33373f;--card:#1f2228;--acc:#6ea0ff;--qc:#24382a;--smp:#1f2f40;--err:#ff8a80;color-scheme:dark}}
+:root[data-theme="dark"]{--tw:#4a1f1f;--bg:#16181d;--fg:#e6e8eb;--mut:#9aa1ab;--line:#33373f;--card:#1f2228;--acc:#6ea0ff;--qc:#24382a;--smp:#1f2f40;--err:#ff8a80;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 Arial,Helvetica,sans-serif}
+main{max-width:1100px;margin:0 auto;padding:20px 16px 40px}
+h1{font-size:20px;margin:0 0 4px}p.sub{margin:0 0 18px;color:var(--mut)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:14px}
+.row{display:flex;flex-wrap:wrap;gap:12px;align-items:end}
+label{display:block;font-size:12px;color:var(--mut);margin-bottom:4px}
+input[type=text]{font:inherit;padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg);width:150px}
+input[type=file]{font:inherit;max-width:100%}
+button{font:inherit;padding:8px 14px;border:0;border-radius:6px;background:var(--acc);color:#fff;cursor:pointer}
+button:disabled{opacity:.4;cursor:not-allowed}
+.msg{font-size:13px;margin-top:8px;color:var(--mut)}.msg.err{color:var(--err)}
+.chk{display:flex;gap:6px;align-items:center;font-size:13px;color:var(--fg);margin:0}
+.leg{font-size:12px;color:var(--mut);margin:0 0 8px}.leg i{display:inline-block;width:11px;height:11px;border:1px solid var(--line);vertical-align:-1px;margin:0 4px 0 10px}
+.wrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:12px;white-space:nowrap}
+th,td{border:1px solid var(--line);padding:3px 7px;text-align:left}
+th{background:var(--card);position:sticky;top:0}
+tr.q td{background:var(--qc)}tr.s td{background:var(--smp)}
+td.n{color:var(--mut);text-align:center}
+h2{font-size:15px;margin:0 0 4px}.hint{font-size:12px;color:var(--mut);margin:0 0 10px}
+#st{white-space:nowrap}#st td,#st th{padding:4px 8px}#st td:first-child{text-align:center;width:28px}
+#st tr.off td{opacity:.45;text-decoration:line-through}#st tr.off td:first-child{text-decoration:none}
+#st td.num{text-align:right;font-variant-numeric:tabular-nums}
+#st tr.add td{background:var(--smp)}
+.tag{font-size:11px;color:var(--acc);margin-left:6px}
+button.x{background:none;color:var(--err);padding:0 6px;font-size:13px}
+button.sec{background:none;color:var(--acc);border:1px solid var(--line)}
+.addf input[type=text]{width:180px}.addf input.sm{width:90px}
+.addf select{font:inherit;padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg)}
+#st tr.tw td,tr.s.tw td{background:var(--tw)}.tag.tw{color:var(--err);font-weight:700}
+.twbox{border-left:4px solid var(--err);background:var(--tw);padding:8px 12px;border-radius:0 8px 8px 0;margin-top:8px;font-size:13px}
+input:focus-visible,button:focus-visible,select:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+</style>
+<main>
+<h1>ICP-MS Sample List Builder</h1>
+<p class="sub">Upload the digestion log &rarr; preview the sample list &rarr; add or leave out samples &rarr; download it as Excel.</p>
+
+<div class="card">
+  <div class="row">
+    <div><label for="f">Digestion log (.xlsx)</label><input type="file" id="f" accept=".xlsx,.xlsm"></div>
+    <div><label for="d">QC date (MM-DD-YYYY)</label><input type="text" id="d" placeholder="10-05-2026" maxlength="10"></div>
+    <label class="chk"><input type="checkbox" id="h" checked> Include header row</label>
+    <button id="dl" disabled>Download Excel</button>
+  </div>
+  <div class="msg" id="m">Date fills in from the file name (e.g. 10-5-2026_...) and can be edited.</div>
+  <div class="twbox" id="tw" role="alert" hidden></div>
+</div>
+
+<div class="card" id="sc" hidden>
+  <h2>Samples</h2>
+  <p class="hint">Untick a sample to leave it out. Added samples go at the end. Vials and QC placement renumber automatically.</p>
+  <div class="wrap" style="max-height:360px;overflow:auto;margin-bottom:12px"><table id="st"></table></div>
+  <form class="row addf" id="af" autocomplete="off">
+    <div><label for="an">Sample name</label><input type="text" id="an" placeholder="2610ACE0982_P_11018"></div>
+    <div><label for="at">Sample type</label><input type="text" id="at" list="types" placeholder="Flower"><datalist id="types"></datalist></div>
+    <div><label for="aw">Weight (g)</label><input type="text" id="aw" class="sm" inputmode="decimal" placeholder="0.2500"></div>
+    <div><label for="av">Final vol. (mL)</label><input type="text" id="av" class="sm" inputmode="decimal" value="50"></div>
+    <button type="submit">Add sample</button>
+    <button type="button" class="sec" id="all">Include all</button>
+  </form>
+  <div class="msg" id="am"></div>
+</div>
+
+<div id="out" hidden>
+  <p class="leg"><i style="background:var(--qc)"></i>QC1 + CCB <i style="background:var(--smp)"></i>Digestion log samples <i style="background:var(--bg)"></i>Beginning sequence</p>
+  <div class="wrap"><table id="t"></table></div>
+</div>
+</main>
+
+<script>
+const INSTR="The Dude", CAL="HMCAL09142026";
+const COLS=["Sample Type","Sample Name","User Def. 1","Vial#","File Name","Replicates","Level","Total Dil.","Sample Weight or Volume","Final Weight or Volume","Dilution Multiplier","Comment","User Def. 2","User Def. 3"];
+let log=[], rows=[], fname="", own=false;  // own = Diana uploaded her own log, which overrides the dashboard's Populate
+const $=id=>document.getElementById(id);
+const say=(t,e)=>{$("m").textContent=t;$("m").className="msg"+(e?" err":"")};
+/* ---- listed twice: the same sample number more than once ('2610ACE1004_P_11213' = 'P_11213'; blanks never count) ---- */
+const dupKey=n=>String(n||"").trim().replace(/^\d{4}[A-Z]{2,}\d+_/i,"").toUpperCase();
+function twiceIn(list){const m=new Map();list.forEach((s,i)=>{if(/^blank\b/i.test(s.name))return;const k=dupKey(s.name);if(!m.has(k))m.set(k,{name:s.name,at:[]});m.get(k).at.push(i)});return[...m.values()].filter(x=>x.at.length>1)}
+function showTwice(){const all=twiceIn(log),on=twiceIn(log.filter(x=>x.on)),b=$("tw");
+  if(!all.length){b.hidden=true;return}
+  const t=d=>d.map(x=>x.name).join(", ");
+  b.hidden=false;b.textContent=on.length?`Listed twice in the sample list: ${t(on)}. Was a sample run twice? Untick the extra copy before you download.`:`Listed twice in ${fname}: ${t(all)}. The extra copy is unticked, so the sample list has each one once.`}
+
+/* ---- fixed beginning sequence ---- */
+function begin(){
+  const R=(t,n,u1,v,lvl,cm,u2,u3)=>({k:"b",c:[t,n,u1,v,"","",lvl||"","","","","",cm||"",u2,u3]});
+  const o=[R("Sample","Rinse ","",1,"","","",""),R("Sample","Rinse ","",1,"","","",""),R("Sample","Rinse ","",1,"","","","")];
+  o.push(R("CalBlk","Cal Blank","Cal Blank",1201,"Level 1","Prepped:9/14//2026 ","KK",INSTR));
+  [["0.02; 0.2"],["0.05; 0.5"],["0.1; 1"],["0.5; 5"],["1; 10"],["5; 50"]].forEach((a,i)=>
+    o.push(R("CalStd",`Cal Std ${a[0]} ppb | ${CAL}`,`Cal Std ${a[0]} ppb`,1202+i,"Level "+(i+2),"","KK",INSTR)));
+  o.push(R("Sample","rinse","",1,"","","KK",INSTR));
+  return o;
+}
+function qc(date){
+  const n=`${date} 0.8 ppb HMCCV-78`;
+  return [{k:"q",c:["QC1",n,n,1301,"","","","","","","","prep 09-14-2026 ","KK",INSTR]},
+          {k:"q",c:["BlkVrfy","CCB","CCB",1302,"","","","","","","","","KK",INSTR]}];
+}
+
+/* ---- vial numbers: rack, row, column. Sample racks are 12 across by 5 rows and start at rack 2, so 2512 is followed by 3101 ---- */
+const vialOf=n=>(2+Math.floor(n/60))*1000+(Math.floor(n%60/12)+1)*100+n%12+1;
+/* ---- build ---- */
+function build(){
+  const date=$("d").value.trim();
+  if(!log.length) return;
+  renderSamples();showTwice();
+  const act=log.filter(x=>x.on);
+  if(!act.length){say("All samples are unticked. Tick at least one.",1);$("dl").disabled=true;$("out").hidden=true;return}
+  if(!/^\d{2}-\d{2}-\d{4}$/.test(date)){say("Enter the QC date as MM-DD-YYYY.",1);$("dl").disabled=true;return}
+  rows=[...begin(),...qc(date)];
+  act.forEach((s,i)=>{
+    const vial=vialOf(i);
+    rows.push({k:"s",c:["Sample",s.name,s.type,vial,"","","","",s.wt,s.vol,1,"","DC",INSTR]});
+    if((i+1)%20===0 && i+1<act.length) rows.push(...qc(date));
+  });
+  rows.push(...qc(date));
+  render(); $("dl").disabled=false;
+  const nAdd=act.filter(x=>x.added).length, nOff=log.length-act.length;
+  say(`${log.filter(x=>!x.added).length} samples read from ${fname}`+(nAdd?`, ${nAdd} added`:"")+(nOff?`, ${nOff} left out`:"")+`. ${act.length} samples and ${rows.length} rows in the sample list.`);
+}
+const f4=v=>(typeof v==="number"?v.toFixed(4):v);
+function render(){
+  const t=$("t");
+  let h="<tr><th>#</th>"+COLS.map(c=>`<th>${c}</th>`).join("")+"</tr>";
+  const TW=new Set(twiceIn(log.filter(x=>x.on)).map(x=>dupKey(x.name)));
+  rows.forEach((r,i)=>{
+    const c=r.c.slice();
+    if(r.k==="s") c[7]=typeof c[8]==="number"?(c[9]/c[8]).toFixed(4):"";
+    c[8]=f4(c[8]);c[10]=f4(c[10]);
+    // order in c: type,name,u1,vial,file,rep,lvl,totdil(7),wt(8),vol(9),mult(10)...
+    h+=`<tr class="${r.k}${r.k==="s"&&TW.has(dupKey(c[1]))?" tw":""}"><td class="n">${i+1}</td>`+c.map(x=>`<td>${x===""?"":String(x).replace(/&/g,"&amp;").replace(/</g,"&lt;")}</td>`).join("")+"</tr>";
+  });
+  t.innerHTML=h; $("out").hidden=false;
+}
+
+/* ---- read digestion log ---- */
+$("f").addEventListener("change",async e=>{
+  const file=e.target.files[0]; if(!file) return;
+  own=true; fname=file.name; log=[]; $("out").hidden=true; $("sc").hidden=true; $("am").textContent=""; $("dl").disabled=true;
+  try{
+    const wb=XLSX.read(await file.arrayBuffer(),{type:"array",cellDates:true});
+    const ws=wb.Sheets[wb.SheetNames.find(n=>/worklist/i.test(n))||wb.SheetNames[0]];
+    const a=XLSX.utils.sheet_to_json(ws,{header:1,defval:""});
+    let hi=a.findIndex(r=>String(r[1]).trim()==="Sample Number");
+    if(hi<0) throw new Error("Couldn't find the 'Sample Number' header row.");
+    for(let i=hi+1;i<a.length;i++){
+      const [ ,name,type,wt,vol]=a[i];
+      if(String(name).trim()!=="" && typeof wt==="number") log.push({name:String(name).trim(),type:String(type).trim(),wt,vol:typeof vol==="number"?vol:50,on:true});
+    }
+    if(!log.length) throw new Error("No samples with a name and weight were found.");
+    const m=fname.match(/^(\d{1,2})-(\d{1,2})-(\d{4})/);
+    if(m) $("d").value=`${m[1].padStart(2,"0")}-${m[2].padStart(2,"0")}-${m[3]}`;
+    else if(!$("d").value){const n=new Date();$("d").value=`${String(n.getMonth()+1).padStart(2,"0")}-${String(n.getDate()).padStart(2,"0")}-${n.getFullYear()}`}
+    build();
+  }catch(err){say(err.message||"Could not read that file.",1)}
+});
+$("d").addEventListener("input",build);
+
+/* ---- filled by the dashboard's Populate (weights come later from the weighed log upload) ---- */
+window.addEventListener("message",e=>{
+  const d=e.data; if(!d||d.type!=="hmb-batch-log"||own||!Array.isArray(d.rows)||!d.rows.length) return;
+  fname=d.fileName||"today's digestion log";
+  log=d.rows.map(r=>({name:String(r.name).trim(),type:String(r.type||"").trim(),wt:typeof r.wt==="number"?r.wt:null,vol:typeof r.vol==="number"?r.vol:50,on:true})).filter(r=>r.name);
+  const m=fname.match(/^(\d{1,2})-(\d{1,2})-(\d{4})/);
+  if(m) $("d").value=`${m[1].padStart(2,"0")}-${m[2].padStart(2,"0")}-${m[3]}`;
+  else if(!$("d").value){const n=new Date();$("d").value=`${String(n.getMonth()+1).padStart(2,"0")}-${String(n.getDate()).padStart(2,"0")}-${n.getFullYear()}`}
+  build(); say($("m").textContent+" Filled from the dashboard. Upload your weighed digestion log to replace it.");
+});
+
+/* ---- samples panel: include/exclude, add, remove ---- */
+const esc=v=>String(v).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/"/g,"&quot;");
+function renderSamples(){
+  $("sc").hidden=false;
+  let n=0;const TW=new Set(twiceIn(log).map(x=>dupKey(x.name)));
+  let h="<tr><th>Use</th><th>Vial#</th><th>Sample Name</th><th>Sample Type</th><th>Weight (g)</th><th>Final Vol.</th><th></th></tr>";
+  log.forEach((s,i)=>{
+    const vial=s.on?vialOf(n++):"";
+    const tw=TW.has(dupKey(s.name))&&!/^blank\b/i.test(s.name);
+    h+=`<tr class="${s.on?"":"off"}${s.added?" add":""}${tw?" tw":""}"><td><input type="checkbox" data-i="${i}" ${s.on?"checked":""} aria-label="Include ${esc(s.name)}"></td>`+
+       `<td class="num">${vial}</td><td>${esc(s.name)}${s.added?'<span class="tag">added</span>':""}${tw?'<span class="tag tw">listed twice</span>':""}</td><td>${esc(s.type)}</td>`+
+       `<td class="num">${typeof s.wt==="number"?s.wt.toFixed(4):"<i>weigh</i>"}</td><td class="num">${s.vol}</td>`+
+       `<td>${s.added?`<button type="button" class="x" data-r="${i}" aria-label="Remove ${esc(s.name)}">Remove</button>`:""}</td></tr>`;
+  });
+  $("st").innerHTML=h;
+  const types=[...new Set(log.map(x=>x.type).filter(Boolean))];
+  $("types").innerHTML=types.map(t=>`<option value="${esc(t)}">`).join("");
+}
+$("st").addEventListener("change",e=>{const i=e.target.dataset.i;if(i!==undefined){log[i].on=e.target.checked;build()}});
+$("st").addEventListener("click",e=>{const i=e.target.dataset.r;if(i!==undefined){log.splice(+i,1);build()}});
+$("all").addEventListener("click",()=>{log.forEach(x=>x.on=true);build()});
+$("af").addEventListener("submit",e=>{
+  e.preventDefault();
+  const am=$("am"), name=$("an").value.trim(), type=$("at").value.trim(), wt=parseFloat($("aw").value), vol=parseFloat($("av").value);
+  const bad=t=>{am.textContent=t;am.className="msg err"};
+  if(!name) return bad("Enter a sample name.");
+  if(log.some(x=>dupKey(x.name)===dupKey(name))) return bad(`${name} is already in the list.`);
+  if(!(wt>0)) return bad("Enter the sample weight in grams, e.g. 0.2500.");
+  if(!(vol>0)) return bad("Enter the final volume in mL, e.g. 50.");
+  log.push({name,type,wt,vol,on:true,added:true});
+  $("an").value="";$("aw").value="";am.textContent=`Added ${name}.`;am.className="msg";
+  build(); $("an").focus();
+});
+
+/* ---- export ---- */
+$("dl").addEventListener("click",async()=>{
+  const aoa=[]; if($("h").checked) aoa.push(COLS);
+  const off=aoa.length;
+  rows.forEach(r=>aoa.push(r.c.map(x=>x===""?null:x)));
+  const ws=XLSX.utils.aoa_to_sheet(aoa);
+  rows.forEach((r,i)=>{ if(r.k==="s" && typeof r.c[8]==="number"){
+    const rn=i+off+1, ref="H"+rn;
+    ws[ref]={t:"n",f:`J${rn}/I${rn}`,v:r.c[9]/r.c[8],z:"0.0000"};
+    ["I","K"].forEach(c=>{if(ws[c+rn]) ws[c+rn].z="0.0000"});
+  }});
+  ws["!cols"]=[8,38,26,7,9,10,8,10,12,12,12,18,10,10].map(w=>({wch:w}));
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"Sample List");
+  const data=XLSX.write(wb,{type:"array",bookType:"xlsx"});
+  const dls=await (window.claude?claude.use("downloads"):null);
+  if(!dls){const fn=`${$("d").value}_Samples-1_SampleList.xlsx`;
+    if(window.parent!==window){window.parent.postMessage({type:"hmb-download",filename:fn,data},"*");say("Sending to the dashboard to save…");return}
+    const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([data]));a.download=fn;a.click();say("Saved.");return}
+  const tw=twiceIn(log.filter(x=>x.on));
+  try{await dls.save({filename:`${$("d").value}_Samples-1_SampleList.xlsx`,data});say(tw.length?`Saved, but it lists ${tw.map(x=>x.name).join(", ")} twice.`:"Saved.",tw.length)}
+  catch(e){say(e&&e.code==="declined"?"Download cancelled.":"Couldn't save the file ("+(e&&e.code||"error")+").",1)}
+});
+</script>
+
+</body></html>

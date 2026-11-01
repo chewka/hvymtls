@@ -1,0 +1,1135 @@
+<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0}</style>
+<title>Make Digestion Log</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Atkinson+Hyperlegible:wght@400;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<!-- SheetJS reads .xlsx/.csv; ExcelJS writes the formatted new log; JSZip edits an existing log in place. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+/* Layout: three numbered steps (add samples, receive orders, make the log), status tiles on top, extras folded at the bottom. Tokens match the Heavy Metals Bench dashboard. */
+:root {
+  --bg: #eef2f6; --surface: #ffffff; --ink: #1d2738; --muted: #5d6a7e; --line: #d3dbe6;
+  --orange: #f2661c; --orange-deep: #c94a0a; --orange-soft: #ffe2cf; --on-orange: #ffffff;
+  --teal: #11897a; --teal-soft: #d3f1ec; --amber: #b77900; --amber-soft: #fbedc6;
+  --red: #c2332f; --red-soft: #f9d9d7; --blue: #2f6fd6; --blue-soft: #dbe7fb; --chip: #e4e9f0; --faint: #a6b0be;
+  --f-display: "Fredoka", "Trebuchet MS", system-ui, sans-serif;
+  --f-body: "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121722; --surface: #1b2230; --ink: #e8edf5; --muted: #9aa6b9; --line: #2e3849;
+    --orange: #ff7a33; --orange-deep: #ff9a5e; --orange-soft: #3d2416; --on-orange: #1a0d05;
+    --teal: #3cc7b4; --teal-soft: #163631; --amber: #f0b440; --amber-soft: #3a2e12;
+    --red: #ff7a72; --red-soft: #45201f; --blue: #7aa8ff; --blue-soft: #1c2a45; --chip: #283142; --faint: #6f7b8f; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121722; --surface: #1b2230; --ink: #e8edf5; --muted: #9aa6b9; --line: #2e3849;
+  --orange: #ff7a33; --orange-deep: #ff9a5e; --orange-soft: #3d2416; --on-orange: #1a0d05;
+  --teal: #3cc7b4; --teal-soft: #163631; --amber: #f0b440; --amber-soft: #3a2e12;
+  --red: #ff7a72; --red-soft: #45201f; --blue: #7aa8ff; --blue-soft: #1c2a45; --chip: #283142; --faint: #6f7b8f; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.5; }
+.wrap { max-width: 1080px; margin: 0 auto; padding-inline: 16px; padding-block: 20px 48px; display: grid; gap: 16px; }
+h1, h2, h3 { font-family: var(--f-display); text-wrap: balance; margin: 0; line-height: 1.15; }
+h1 { font-size: clamp(1.5rem, 4vw, 2rem); font-weight: 700; }
+h2 { font-size: 1.25rem; font-weight: 600; display: flex; gap: 10px; align-items: center; }
+h3 { font-size: 1rem; font-weight: 600; }
+p { margin: 0; }
+.num, .mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); } .small { font-size: .85rem; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 6px 12px; }
+button:hover { border-color: var(--orange); }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible, .drop:focus-visible { outline: 3px solid var(--blue); outline-offset: 2px; }
+button.go { background: var(--orange); border-color: var(--orange); color: var(--on-orange); font-weight: 700; }
+button.go:hover { background: var(--orange-deep); border-color: var(--orange-deep); }
+button.big { font-size: 1.05rem; padding: 10px 18px; }
+button.ic, button.x { display: inline-grid; place-items: center; width: 28px; height: 28px; padding: 0; line-height: 0; border-radius: 50%; flex: none; }
+button.ic { color: var(--blue); border-color: var(--line); background: transparent; }
+button.ic:hover { border-color: var(--blue); background: var(--blue-soft); }
+button.x { color: var(--faint); border-color: var(--line); background: transparent; }
+button.x:hover { color: var(--red); border-color: var(--red); background: var(--red-soft); }
+button.link { border: 0; background: none; padding: 2px 4px; color: var(--orange); text-decoration: underline; }
+input[type=text], input[type=number], input[type=date], input[type=search], select, textarea { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; }
+.top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: 8px; }
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 620px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.stat { text-align: left; display: grid; gap: 2px; padding: 12px 14px; border-radius: 12px; border: 2px solid transparent; background: var(--surface); }
+.stat b { font-family: var(--f-display); font-size: 1.9rem; line-height: 1; font-variant-numeric: tabular-nums; }
+.stat.on { border-color: var(--ink); }
+.stat.y b { color: var(--amber); } .stat.r b { color: var(--red); } .stat.g b { color: var(--teal); }
+.step { background: var(--surface); border-radius: 14px; padding: 16px; display: grid; gap: 12px; min-width: 0; }
+.badge { display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--orange); color: var(--on-orange); font-family: var(--f-display); font-size: 1rem; flex: none; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.drop { border: 2px dashed var(--orange); background: var(--orange-soft); border-radius: 12px; padding: 22px 16px; text-align: center; cursor: pointer; display: grid; gap: 4px; justify-items: center; }
+.drop.over { border-style: solid; }
+.drop strong { font-family: var(--f-display); font-size: 1.15rem; }
+.msgs { display: grid; gap: 6px; }
+.msg { padding: 8px 12px; border-radius: 8px; background: var(--blue-soft); }
+.msg.e { background: var(--red-soft); } .msg.w { background: var(--amber-soft); }
+.scroll { overflow-x: auto; min-width: 0; }
+table { border-collapse: collapse; width: 100%; }
+table.ot { table-layout: fixed; }
+table.ot td { overflow-wrap: anywhere; }
+table.ot .acts { flex-wrap: wrap; }
+table.ot table { table-layout: auto; }
+th, td { padding: 7px 8px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; }
+th { font-size: .75rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+td.n { font-family: var(--f-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+tr.date td { background: var(--chip); font-weight: 700; font-size: .85rem; }
+tr.held td { opacity: .6; }
+tr.sub > td { background: var(--bg); }
+.pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: .8rem; white-space: nowrap; background: var(--chip); }
+.pill.g { background: var(--teal-soft); color: var(--teal); } .pill.y { background: var(--amber-soft); color: var(--amber); } .pill.r { background: var(--red-soft); color: var(--red); }
+.acts { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.orow .acts { flex-wrap: nowrap; margin-left: auto; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button { border-radius: 999px; padding: 4px 12px; }
+.chips button.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.box { border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: grid; gap: 8px; }
+.box.hi { border: 2px solid var(--orange); }
+details.more { background: var(--surface); border-radius: 14px; padding: 4px 16px; }
+details.more > summary { cursor: pointer; padding: 12px 0; font-family: var(--f-display); font-size: 1.15rem; font-weight: 600; }
+details.more[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+.tool { padding-block: 14px; border-bottom: 1px solid var(--line); display: grid; gap: 8px; min-width: 0; }
+.tool:last-child { border-bottom: 0; }
+.wrap, .step, .tool, .box { grid-template-columns: minmax(0, 1fr); }
+.pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.pair label { display: block; margin-bottom: 2px; }
+textarea { width: 100%; font-family: var(--f-mono); font-size: .85rem; }
+.tin { width: 140px; }
+.olist2 { display: grid; gap: 6px; }
+.orow { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); cursor: grab; }
+.orow .oname { flex: 1; min-width: 160px; }
+.orow .grip { color: var(--muted); font-size: 1.1rem; }
+.orow.endz { cursor: default; border-style: dashed; color: var(--muted); font-size: .85rem; justify-content: center; }
+.ochip { display: inline-block; padding: 4px 12px; border-radius: 999px; background: var(--chip); cursor: grab; font-family: var(--f-mono); font-size: .85rem; user-select: none; }
+tr.drag { cursor: grab; }
+tr.qc td { color: var(--muted); background: var(--chip); }
+.dz { outline: 2px dashed var(--orange); outline-offset: -2px; }
+.corow { display: flex; align-items: center; gap: 8px; }
+.gno { min-width: 1.4em; color: var(--muted); font-family: var(--f-mono); }
+button.coname { border: 0; background: none; padding: 0; font-weight: 700; color: var(--ink); text-align: left; }
+button.coname:hover { text-decoration: underline; border: 0; }
+.dayh { font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-top: 6px; }
+.fl { position: fixed; inset: 0; background: #111; color: #fff; display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 99; text-align: center; padding: 16px; }
+.fl.on { display: flex; }
+.fl #fn { font-family: var(--f-mono); font-size: min(9vw, 110px); font-weight: 500; word-break: break-all; }
+.fl #fc { font-size: 22px; opacity: .7; margin: 10px; }
+.fl button { font-size: 18px; padding: 8px 18px; margin: 6px; background: #222; color: #fff; border-color: #555; }
+@media (prefers-reduced-motion: no-preference) { button { transition: background .15s, border-color .15s; } }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button:disabled:hover { border-color: var(--line); }
+.segs { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; background: var(--surface); }
+.segs button { border: 0; border-radius: 0; padding: 5px 12px; background: transparent; }
+.segs button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+.plans { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.plan { display: flex; gap: 8px; align-items: flex-start; border: 2px solid var(--line); border-radius: 10px; padding: 10px; cursor: pointer; background: var(--surface); }
+.plan.on { border-color: var(--orange); background: var(--orange-soft); }
+.plan input { margin-top: 4px; accent-color: var(--orange); flex: none; }
+details.box > summary { cursor: pointer; }
+.hgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.hgrid label { display: grid; gap: 2px; font-size: .85rem; }
+.hgrid input, table.reag input { width: 100%; min-width: 0; }
+table.reag td { padding: 4px; }
+table.reag td:first-child { min-width: 130px; }
+.chips .ochip { cursor: default; }
+</style>
+
+<div class="fl" id="fl"><div id="fo"></div><div id="fn"></div><div id="fc"></div>
+  <div><button onclick="flToggle()" id="fp">Pause</button><button onclick="flStart(flk)">Replay</button><button onclick="flClose()">Close (Esc)</button></div>
+  <div style="margin-top:14px;font-size:16px">Fast <input type="range" id="fs" min="200" max="5000" step="100" style="width:min(60vw,420px);vertical-align:middle" oninput="cfg.ms=+this.value;document.getElementById('fv').textContent=(cfg.ms/1000).toFixed(1)+' s per sample'"> Slow<div id="fv" style="opacity:.7;margin-top:4px"></div></div>
+</div>
+
+<div class="wrap">
+  <div class="top">
+    <div><h1>Make Digestion Log</h1><p class="muted small" id="savest"></p></div>
+    <div class="row"><span class="muted small">Show</span><div class="segs" role="group" aria-label="List order"><button id="vOrd" onclick="setView('orders')">Order of orders</button><button id="vNum" onclick="setView('num')">By number</button></div><span class="muted small" id="today"></span></div>
+  </div>
+  <div class="msgs" id="msgs"></div>
+  <div class="stats" id="stats"></div>
+
+  <section class="step">
+    <h2><span class="badge">1</span>Add samples</h2>
+    <div class="drop" id="drop" tabindex="0" role="button" onclick="bulkPick()" onkeydown="if(event.key=='Enter'||event.key==' '){event.preventDefault();bulkPick()}">
+      <strong>Drop files here or click to choose</strong>
+      <span class="muted small">Orders CSV, sample CSVs, Report Generator, digestion logs. Any mix, sorted for you.</span>
+    </div>
+    <div id="pend"></div>
+    <p class="muted small" id="loaded"></p>
+    <div class="box">
+      <h3>Add samples by hand</h3>
+      <p class="muted small">One sample number per line. Put the types in the second box in the same order, or after a comma or tab on the same line. Types are optional: a missing type is set from the number (_P_ is Flower, _C_ is Concentrates). If the order isn't loaded yet, it is created.</p>
+      <div class="pair">
+        <div><label for="mb" class="small">Sample numbers</label><textarea id="mb" rows="6" placeholder="2610ACE0986_P_11055&#10;2610ACE0986_C_11056" oninput="renderManPrev()"></textarea></div>
+        <div><label for="mt" class="small">Types (optional)</label><textarea id="mt" rows="6" placeholder="Flower&#10;Live Resin" oninput="renderManPrev()"></textarea></div>
+      </div>
+      <div class="row">
+        <label for="mo" class="small">Order for numbers without a 2610ACE… prefix</label><select id="mo" onchange="renderManPrev()"></select>
+        <label for="mco" class="small">Company</label><input type="text" id="mco" list="cos" style="width:170px" placeholder="for a new order" oninput="renderManPrev()"><datalist id="cos"></datalist>
+        <label class="row small" style="gap:6px"><input type="checkbox" id="mrecv" checked> Mark received now</label>
+      </div>
+      <div id="mprev"></div>
+      <div class="row"><button class="go" id="madd" onclick="addManual()">Add samples</button></div>
+      <div id="manlist"></div>
+    </div>
+  </section>
+
+  <section class="step">
+    <h2><span class="badge">2</span>Receive orders</h2>
+    <div id="olist"></div>
+  </section>
+
+  <section class="step">
+    <h2><span class="badge">3</span>Make the digestion log</h2>
+    <div id="logbox"></div>
+    <details class="box" id="hdr"><summary><b>Log header</b> <span class="muted small" id="hdrsum"></span></summary><div id="lotbox"></div></details>
+    <div id="logbtns"></div>
+  </section>
+
+  <details class="more" id="more">
+    <summary>Extras</summary>
+    <div class="tool">
+      <h3>Receive from a photo</h3>
+      <div class="row"><button onclick="photoStart()" style="min-height:44px">Receive from photo</button><button class="link" onclick="ph={nums:'',items:[],gaps:[]};renderPhoto()">Type tube numbers instead</button></div>
+      <div id="photo"></div>
+    </div>
+    <div class="tool">
+      <h3>Find a sample</h3>
+      <input type="search" id="find" placeholder="Sample or order number" oninput="renderFind()">
+      <div id="findres"></div>
+    </div>
+    <div class="tool">
+      <h3>Status export</h3>
+      <p class="muted small">One row per sample with received, digested, due and status, in the order chosen at the top.</p>
+      <div class="row"><button onclick="expCSV()">Download CSV</button><button onclick="expXLSX()">Download Excel</button></div>
+    </div>
+    <div class="tool">
+      <h3>Hidden orders</h3>
+      <div id="hidden"></div>
+    </div>
+    <div class="tool">
+      <h3>Settings</h3>
+      <div class="row"><label for="cfgn">Expect digestion within</label><input type="number" id="cfgn" min="0" value="1" style="width:70px" onchange="cfg.n=Math.max(0,+this.value||0);render()"><span>day(s) after receipt, when the Report Generator has no due date.</span></div>
+      <div class="row"><label for="cfgms">Flash each sample number for</label><input type="number" id="cfgms" min="200" max="5000" step="100" value="2000" style="width:90px" onchange="cfg.ms=Math.min(5000,Math.max(200,+this.value||2000))"><span>ms</span></div>
+    </div>
+    <div class="tool">
+      <h3>Loaded files</h3>
+      <div id="files"></div>
+    </div>
+  </details>
+</div>
+
+<script>
+// ---------- state (memory only) ----------
+let manual=[],manOrders={},typeOv={},removedO={},hold={},pendQ=[],flk=null,flT=null,flL=[],flI=0,flP=false,files=[],oRecv={},sRecv={},cfg={n:1,ms:2000},expand=null,pend=null,msgs=[],fid=0,flt='',odate='',scope='recv',chartSeq=[],chartOn=false,upd=null,oSeq={},sSeq={},rseq=0,userOrder=[],orderPri=[],dragId=null,dragOrd=null;
+// view: 'orders' = order of orders (default), 'num' = by number. plan above 41 tubes: '' = not chosen yet, 'two', 'c41', 'c32'
+let concZone=(()=>{try{return localStorage.getItem('hmb.concZone')==='zone'}catch(e){return false}})();
+const setZone=on=>{concZone=on;try{localStorage.setItem('hmb.concZone',on?'zone':'orders')}catch(e){}render()};
+let view='orders',plan='',hdrAck=false,prepDate='',lastSeqSig='',hdrOpened=false;
+// company names typed in step 2; the calendar's line-up from the dashboard (order numbers in order, and each order's day)
+let coOv={},editCo=null,dashSeq=[],dashDay={},dragGrp=null,GRP={},GRL={};
+const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const pad=n=>String(n).padStart(2,'0');
+const iso=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+const today=()=>iso(new Date());
+const fmt=s=>{if(!s)return'';const[y,m,d]=s.slice(0,10).split('-').map(Number);return MON[m-1]+' '+d+', '+y};
+const fmtS=s=>{if(!s)return'';const[y,m,d]=s.slice(0,10).split('-').map(Number);return m+'/'+d};   // short date: 10/9
+const fmtT=t=>t?fmt(t.slice(0,10))+' '+t.slice(11,16):'';
+const nowS=()=>{const d=new Date();return iso(d)+'T'+pad(d.getHours())+':'+pad(d.getMinutes())};
+const addDays=(s,n)=>{const[y,m,d]=s.slice(0,10).split('-').map(Number);return iso(new Date(y,m-1,d+n))};
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const $=id=>document.getElementById(id);
+// order key: '2610ACE0987', 'ACE0987' and '0987' all become '987'
+const nk=s=>{s=String(s??'').toUpperCase().replace(/[^A-Z0-9]/g,'');const m=s.match(/ACE0*(\d+)$/);return m?m[1]:s.replace(/^0+(?=.)/,'')};
+const EXCL=/topical|edible/i;
+function sType(tp,ty,cat){tp=(tp||'').trim();ty=(ty||'').trim();cat=(cat||'').trim();
+  if(/flower|trim|pre-?roll|shake|plant/i.test(tp))return tp;
+  if(/flower|trim|pre-?roll|shake/i.test(ty))return ty;
+  return ty||tp||cat}
+const clean=v=>String(v??'').trim();
+const dk=s=>String(s??'').trim().replace(/_dup$/i,'').replace(/^\d{4}[A-Z]{2,}\d+_/i,'').toUpperCase(); // '2610ACE0982_P_11015' == 'P_11015'
+
+// ---------- type rule: a sample type is always a word ----------
+const typeFromId=id=>/_C_/i.test(id)?'Concentrates':/_P_/i.test(id)?'Flower':'';
+function tidyType(t){t=t.replace(/\s+/g,' ').trim();
+  if(/^(badder|budder|batter)(\s*\/\s*(badder|budder|batter))?$/i.test(t))return'Batter/Badder';
+  const cap=w=>w.replace(/(^|[-/(])([a-z])/g,(m,a,b)=>a+b.toUpperCase());
+  return t.split(' ').map(w=>w===w.toLowerCase()?cap(w):(w===w.toUpperCase()&&w.length>4?cap(w.toLowerCase()):w)).join(' ')}
+// -> {type, fixed} or {reject:true}
+function fixType(t,id){t=clean(t);
+  if(EXCL.test(t))return{reject:true};
+  if(!t||/^[\d.,\s-]+$/.test(t))return{type:typeFromId(id),fixed:true};
+  return{type:tidyType(t),fixed:false}}
+
+// ---------- parsing helpers ----------
+function serial(n){const d=new Date(Date.UTC(1899,11,30)+Math.round(n)*864e5);return d.getUTCFullYear()+'-'+pad(d.getUTCMonth()+1)+'-'+pad(d.getUTCDate())}
+function pDate(v){
+  if(v===''||v==null)return'';
+  if(typeof v==='number')return v>20000&&v<80000?serial(v):'';
+  const s=String(v).trim();let m;
+  if(/^\d{5}(\.\d+)?$/.test(s))return serial(+s);
+  if(m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))return m[1]+'-'+pad(+m[2])+'-'+pad(+m[3]);
+  if(m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/)){let y=+m[3];if(y<100)y+=2000;return y+'-'+pad(+m[1])+'-'+pad(+m[2])}
+  const d=new Date(s);return isNaN(d)?'':iso(d)}
+function parseCSV(t){t=t.replace(/^﻿/,'');const R=[];let r=[],c='',q=false;
+  for(let i=0;i<t.length;i++){const ch=t[i];
+    if(q){if(ch=='"'){if(t[i+1]=='"'){c+='"';i++}else q=false}else c+=ch}
+    else if(ch=='"')q=true;else if(ch==','){r.push(c);c=''}
+    else if(ch=='\n'||ch=='\r'){if(ch=='\r'&&t[i+1]=='\n')i++;r.push(c);c='';R.push(r);r=[]}else c+=ch}
+  if(c!==''||r.length){r.push(c);R.push(r)}return R}
+function table(rows,test){const hi=rows.findIndex(r=>test(r.map(c=>String(c).toLowerCase().trim())));
+  if(hi<0)return null;return{head:rows[hi].map(c=>String(c).toLowerCase().trim()),body:rows.slice(hi+1).filter(r=>r.some(c=>clean(c)!==''))}}
+const ci=(h,re,not)=>h.findIndex(x=>re.test(x)&&!(not&&not.test(x)));
+const say=(t,k)=>{msgs.push({t,k:k||''})};
+// ---------- listed twice: the same sample number more than once, in any list going in or out ----------
+// '2610ACE1004_P_11213' and 'P_11213' are the same sample; a _dup row is its own name; blanks never count.
+const dupKey=s=>String(s??'').trim().replace(/^\d{4}[A-Z]{2,}\d+_/i,'').toUpperCase();
+function findDups(names,pos){const m=new Map();names.forEach((n,i)=>{n=String(n??'').trim();if(!n||/^blank\b/i.test(n))return;const k=dupKey(n);
+    if(!m.has(k))m.set(k,{id:n,at:[]});m.get(k).at.push(pos?pos[i]:i+1)});return[...m.values()].filter(x=>x.at.length>1)}
+const dupText=(d,lab)=>d.map(x=>x.id+' ('+(lab||'#')+x.at.join(' and '+(lab||'#'))+')').join(', ');
+async function readX(f){const wb=XLSX.read(await f.arrayBuffer(),{type:'array'});
+  for(const n of wb.SheetNames){const r=XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,raw:true,defval:''});if(r.length)return r}return[]}
+function pick(acc,cb,multi){const i=document.createElement('input');i.type='file';i.accept=acc;i.multiple=!!multi;
+  i.onchange=async()=>{for(const f of i.files){try{await cb(f)}catch(e){say(f.name+': could not be read ('+e.message+').','e')}}render()};i.click()}
+
+// ---------- receive samples from a photo of the red tubes ----------
+let ph=null;
+const OCR_SRC='https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js',OCR_LANG='https://cdn.jsdelivr.net/npm/@tesseract.js-data/eng/4.0.0_best_int';
+const loadOCR=()=>window.Tesseract?Promise.resolve():new Promise((ok,no)=>{const e=document.createElement('script');e.src=OCR_SRC;e.onload=ok;e.onerror=()=>no(new Error('the photo reader could not be loaded'));document.head.appendChild(e)});
+const photoStart=()=>pick('image/*',readPhoto);
+const askParent=f=>window.parent===window?Promise.resolve(null):new Promise(ok=>{const id='ph'+Date.now(),t=setTimeout(()=>{removeEventListener('message',h);ok(null)},120000);
+  const h=e=>{const d=e.data;if(!d||d.type!='hmb-photo-answer'||d.id!=id)return;clearTimeout(t);removeEventListener('message',h);
+    ok(d.ok?(d.numbers||[]).join('\n')+'\n'+(d.rows||[]).map(r=>[r.ids].filter(Boolean).join(' ')).join('\n'):null)};
+  addEventListener('message',h);parent.postMessage({type:'hmb-photo-ask',id,mode:'tubes',image:f},'*')});
+async function ocrLocal(f){await loadOCR();
+  const bmp=await createImageBitmap(f,{imageOrientation:'from-image'}),sc=Math.min(1,1800/Math.max(bmp.width,bmp.height)),W=Math.round(bmp.width*sc),H=Math.round(bmp.height*sc),D=Math.ceil(Math.hypot(W,H));
+  const w=await Tesseract.createWorker('eng',1,{langPath:OCR_LANG});await w.setParameters({tessedit_pageseg_mode:'11'});let txt='';
+  for(const a of [0,90,180,270]){ph.msg='Reading photo... '+(a/90+1)+' of 4';renderPhoto();
+    const c=document.createElement('canvas');c.width=c.height=D;const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,D,D);x.translate(D/2,D/2);x.rotate(a*Math.PI/180);x.drawImage(bmp,-W/2,-H/2,W,H);
+    const im=x.getImageData(0,0,D,D),q=im.data;for(let i=0;i<q.length;i+=4){const v=(q[i]*.3+q[i+1]*.4+q[i+2]*.3<55&&q[i]<90)?0:255;q[i]=q[i+1]=q[i+2]=v}x.putImageData(im,0,0);
+    txt+='\n'+(await w.recognize(c)).data.text}
+  await w.terminate();return txt}
+async function readPhoto(f){
+  ph={busy:true,msg:'Reading photo...'};renderPhoto();let txt='';
+  try{const viaP=await askParent(f);txt=viaP!==null?viaP:await ocrLocal(f)}catch(e){txt=''}
+  photoCheck([...new Set((txt.match(/\d{5}/g)||[]))].join('\n'));renderPhoto()}
+const tailNo=id=>(String(id).match(/(\d+)(?:_dup)?$/i)||[])[1]||'';
+function photoCheck(nums){
+  const raw=nums.match(/\d{4,6}/g)||[],twice=[...new Set(raw.filter((n,i)=>raw.indexOf(n)!==i))];
+  const{S}=compute(),read=[...new Set(raw)],by={};
+  Object.values(S).forEach(x=>{const t=tailNo(x.id);if(t&&!/_dup$/i.test(x.id))(by[t]=by[t]||[]).push(x)});
+  const items=[],seen=new Set(read);
+  const missing=Object.keys(by).filter(t=>!seen.has(t));
+  const nn=read.map(Number).filter(n=>by[String(n)]),lo=Math.min(...nn),hi=Math.max(...nn);
+  read.forEach(n=>{const m=by[n];
+    if(m){const open=m.filter(x=>!x.rec);items.push({num:n,ids:m.map(x=>x.id),label:n,sub:m[0].ono||m[0].order,on:open.length>0,note:open.length?'':'already received'})}
+    else{const near=missing.filter(t=>t.length==n.length&&[...t].filter((c,i)=>c!=n[i]).length<=1&&+t>=lo&&+t<=hi);
+      items.push({num:n,ids:near.length==1?by[near[0]].map(x=>x.id):[],label:n,sub:'',on:false,unsure:true,note:near.length==1?'not found, maybe '+near[0]:'not in your orders'})}});
+  const gaps=missing.filter(t=>+t>=lo&&+t<=hi&&!items.some(x=>x.ids.some(id=>tailNo(id)==t)));
+  ph={nums:read.join('\n'),items,gaps,twice}}
+function renderPhoto(){const el=$('photo');if(!el)return;
+  if(!ph){el.innerHTML='';return}
+  if(ph.busy){el.innerHTML='<div class="msg">'+esc(ph.msg)+'</div>';return}
+  const it=ph.items||[],n=it.filter(x=>x.on).length;
+  el.innerHTML='<div class="box hi" style="margin-bottom:10px"><div style="margin-bottom:6px"><b>Tube numbers</b></div>'+
+    '<textarea id="phnums" rows="4" style="width:100%" placeholder="One number per line, e.g. 11033" onchange="photoCheck(this.value);renderPhoto()">'+esc(ph.nums||'')+'</textarea>'+
+    (it.length?'<div style="margin-top:8px">'+it.map((x,i)=>'<label class="row" style="gap:10px;min-height:44px"><input type="checkbox" style="width:22px;height:22px" '+(x.on?'checked ':'')+(x.ids.length?'':'disabled ')+'onchange="ph.items['+i+'].on=this.checked;renderPhoto()"><b class="num">'+esc(x.label)+'</b>'+(x.sub?'<span class="muted small">'+esc(x.sub)+'</span>':'')+(x.note?'<span class="pill '+(x.unsure?'y':'')+'">'+esc(x.note)+'</span>':'')+'</label>').join('')+'</div>':'<p class="muted">No tube numbers yet. Type them above.</p>')+
+    (ph.twice&&ph.twice.length?'<div class="msg e" style="margin-top:6px">Typed twice: '+esc(ph.twice.join(', '))+'. Each tube is received once.</div>':'')+
+    (ph.gaps&&ph.gaps.length?'<div class="small" style="margin-top:6px"><span class="pill y">Not in the photo</span> '+esc(ph.gaps.join(', '))+'</div>':'')+
+    '<div class="row" style="margin-top:10px"><button class="go" style="min-height:44px" onclick="photoApply()"'+(n?'':' disabled')+'>Receive '+n+'</button><button style="min-height:44px" onclick="ph=null;renderPhoto()">Cancel</button></div></div>'}
+function photoApply(){if(!ph||!ph.items)return;
+  const ids=new Set();ph.items.filter(x=>x.on).forEach(x=>x.ids.forEach(id=>ids.add(id)));
+  ids.forEach(id=>{sRecv[id]=nowS();sSeq[id]=++rseq});
+  const{O}=compute();Object.values(O).forEach(o=>{if(!oRecv[o.k]&&o.L.length&&o.L.length>=o.total&&o.L.every(x=>ids.has(x.id)||x.rec)&&o.L.some(x=>ids.has(x.id))){oRecv[o.k]=nowS();oSeq[o.k]=++rseq}});
+  say(ids.size+' sample'+(ids.size==1?'':'s')+' received from the photo.');ph=null;render()}
+
+// ---------- add samples by hand: one set of rules for this page and the dashboard's Orders view ----------
+const COMPANIES=['Polaris','Red Diamond','Deep Roots','GB Sciences','Clark','Reno','Range Biosciences','Deep Roots Aria'];
+const appliedIds={};
+const ORDRE=/^(\d{4}ACE\d+)_/i;
+// read pasted lines and say what would happen to each one; nothing changes yet
+function planAdd(txt,tl,sel,co){const C=compute(),have={},seen={},items=[];
+  Object.values(C.S).forEach(x=>have[dk(x.id)]=x);
+  const nl=String(txt||'').split(/\r?\n/);tl=tl||[];
+  const nIds=nl.filter(x=>x.trim()).length,nTy=tl.filter(x=>x.trim()).length;
+  nl.forEach((ln,i)=>{ln=ln.trim();if(!ln)return;
+    const parts=ln.split(/\t|,/).map(x=>x.trim()),id=parts[0],ty=(parts.slice(1).join(' ')||(tl[i]||'')).trim();
+    if(!id||/^(lab_)?sample(\s*(id|number|no|#))?$/i.test(id))return;                    // pasted header row
+    const it={id,raw:ty?id+', '+ty:id,type:'',no:'',k:'',st:'add',note:''};items.push(it);
+    const h=have[dk(id)];
+    if(h){it.st='skip';it.note='already loaded'+(h.ono?' in '+h.ono:'');return}
+    if(seen[dk(id)]){it.st='skip';it.note='listed twice';return}
+    const ft=fixType(ty,id);if(ft.reject){it.st='skip';it.note='topicals and edibles are not digested';return}
+    it.type=ft.type;it.fixed=ft.fixed&&!!ft.type;
+    const m=id.match(ORDRE);
+    if(m){it.no=m[1].toUpperCase();it.k=nk(it.no)}                                          // the order comes from the sample number
+    else if(sel&&C.O[sel]){it.no=C.O[sel].no;it.k=sel}
+    else if(co){it.no='Manual-'+co.replace(/[^A-Za-z0-9]/g,'')+'-'+today().slice(5);it.k=nk(it.no)}
+    else{it.st='need';it.note='no 2610ACE… prefix: pick an order or type a company';return}
+    it.isNew=!C.O[it.k];seen[dk(id)]=1});
+  return{items,warn:nTy&&nTy!==nIds?'The types box has '+nTy+' line(s) but the sample box has '+nIds+'. They are matched line by line, so check they line up.':''}}
+// apply a planAdd result. o: {co, recv, mid}
+function addSamples(r,o){o=o||{};const made={};let n=0;
+  r.items.filter(x=>x.st=='add').forEach(x=>{delete removedO[x.k];
+    if(x.isNew&&!manOrders[x.k])manOrders[x.k]={no:x.no,name:o.co||'',placed:today(),mid:o.mid};
+    else if(manOrders[x.k]&&!manOrders[x.k].name&&o.co)manOrders[x.k].name=o.co;
+    manual.push({id:x.id,order:x.no,k:x.k,type:x.type,mid:o.mid,at:nowS()});
+    if(o.recv){sRecv[x.id]=nowS();sSeq[x.id]=++rseq}
+    (made[x.no]=made[x.no]||[]).push(x.id);n++});
+  const fixed=r.items.filter(x=>x.st=='add'&&x.fixed).map(x=>x.id),bad=r.items.filter(x=>x.st!='add');
+  if(n)say(n+' sample'+(n==1?'':'s')+' added by hand'+(o.recv?' and marked received':'')+': '+Object.keys(made).map(k=>k+' ('+made[k].length+')').join(', ')+'.');
+  if(fixed.length)say('Type set from the sample number for '+fixed.join(', ')+'.','w');
+  if(bad.length)say('Not added: '+bad.map(x=>x.id+' ('+x.note+')').join('; ')+'.','e');
+  if(!n&&!bad.length)say('Enter at least one sample number.','w');
+  return{ok:n>0,orders:Object.keys(made)}}
+const manRead=()=>planAdd($('mb').value,$('mt').value.split(/\r?\n/),$('mo').value,$('mco').value.trim());
+function renderManPrev(){const el=$('mprev'),b=$('madd');if(!el)return;const r=manRead(),it=r.items,n=it.filter(x=>x.st=='add').length;
+  b.disabled=!n;b.textContent=n?'Add '+n+' sample'+(n==1?'':'s'):'Add samples';
+  if(!it.length&&!r.warn){el.innerHTML='';return}
+  el.innerHTML=(r.warn?'<div class="msg w">'+esc(r.warn)+'</div>':'')+(it.length?'<div class="scroll" style="max-height:260px;overflow-y:auto"><table><tr><th>Sample</th><th>Order</th><th>Type</th><th></th></tr>'+
+    it.map(x=>'<tr><td class="n">'+esc(x.id)+'</td><td class="n">'+esc(x.no)+(x.isNew&&x.st=='add'?' '+pill('new order'):'')+'</td><td>'+esc(x.type)+'</td><td>'+(x.st=='add'?pill('Will add','g'):pill(x.note,x.st=='need'?'y':'r'))+'</td></tr>').join('')+'</table></div>':'')}
+function addManual(){const r=manRead(),res=addSamples(r,{co:$('mco').value.trim(),recv:$('mrecv').checked});
+  if(res.ok){const left=r.items.filter(x=>x.st=='need').map(x=>x.raw);$('mb').value=left.join('\n');$('mt').value=''}   // keep lines that still need an order
+  render()}
+function setManType(id,v){const m=manual.find(x=>x.id===id);if(!m)return;const ft=fixType(v,id);
+  if(ft.reject)say(id+': topicals and edibles are not digested. Type not changed.','e');
+  else{m.type=ft.type;delete typeOv[id];if(ft.fixed)say(id+': a type has to be a word, so it was set to '+(ft.type||'blank')+' from the sample number.','w')}render()}
+function rmManual(id){const m=manual.find(x=>x.id===id);if(!m)return;manual=manual.filter(x=>x.id!==id);
+  if(manOrders[m.k]&&!manual.some(x=>x.k===m.k))delete manOrders[m.k];
+  if(m.mid!=null&&!manual.some(x=>x.mid===m.mid))toDash({type:'hmb-manual-removed',id:m.mid});
+  render()}
+// the dashboard's Orders view sends hand-made orders here
+function addOrderFrom(co,txt,mid){const m0=msgs.length;let r={ok:false,orders:[]};
+  if(!co)say('Choose a company first.','e');else r=addSamples(planAdd(txt,[],'',co),{co,mid});
+  return{ok:r.ok,message:msgs.slice(m0).map(m=>m.t).join(' '),orders:r.orders}}
+function toDash(o){try{if(window.parent!==window)window.parent.postMessage(o,'*')}catch(e){}}
+window.addEventListener('message',e=>{const d=e.data;if(!d)return;
+  if(d.type==='hmb-add-orders'&&Array.isArray(d.orders)){
+    d.orders.forEach(o=>{if(!o||o.id==null||appliedIds[o.id])return;appliedIds[o.id]=1;
+      const r=addOrderFrom(o.company,o.text,o.id);toDash({type:'hmb-add-result',id:o.id,ok:r.ok,message:r.message})});
+    render();announceOrders(true)}
+  else if(d.type==='hmb-remove-manual'){const id=d.id;manual=manual.filter(m=>m.mid!==id);
+    Object.keys(manOrders).forEach(k=>{if(manOrders[k].mid===id&&!manual.some(m=>m.k===k))delete manOrders[k]});render()}
+  else if(d.type==='hmb-plan'&&/^(two|c41|c32)$/.test(d.plan)){plan=d.plan;render()}
+  else if(d.type==='hmb-company'&&Array.isArray(d.nos)){d.nos.forEach(n=>{const k=nk(n),c=String(d.company||'').trim();if(c)coOv[k]=c;else delete coOv[k]});render()}});
+// ---------- loading files ----------
+
+async function impOrders(f){
+  const t=table(parseCSV(await f.text()),h=>h.some(x=>/order/.test(x)));
+  if(!t)return say(f.name+': no order-number column found.','e');
+  const h=t.head,oi=ci(h,/order\s*(#|no|num|id)|^order$|order number|^id$/),
+    ni=ci(h,/customer|client|company|name/,/order|sample/),di=ci(h,/placed|order date|created|^date/),
+    ci_=ci(h,/(number of|total|#|count|qty|quantity).*sample|sample.*(count|qty|quantity|total|#)|^samples$/);
+  if(oi<0)return say(f.name+': could not find the order number column.','e');
+  const seen={},d=[];let skipped=0;
+  t.body.forEach(r=>{const no=clean(r[oi]);if(!no){skipped++;return}
+    if(seen[nk(no)])say('Order '+no+' appears twice in '+f.name+'; the later row is used.','w');
+    seen[nk(no)]=1;d.push({no,name:ni>=0?clean(r[ni]):'',placed:di>=0?pDate(r[di]):'',count:ci_>=0?parseInt(r[ci_])||0:0})});
+  const have=new Set(files.filter(x=>x.k=='orders').flatMap(x=>x.d.map(o=>nk(o.no)))),dupN=d.filter(o=>have.has(nk(o.no))).length;   // only orders from another orders file count as already loaded
+  files.push({id:++fid,k:'orders',name:f.name,at:nowS(),n:d.length,d});
+  if(dupN)say(f.name+': '+dupN+' of its orders were already loaded, so they were merged, not doubled.','w');
+  say(f.name+': '+d.length+' orders loaded'+(skipped?' ('+skipped+' rows without an order number skipped)':'')+
+    (ci_<0?'. No sample-count column, so counts come from the sample files.':'.'),ci_<0?'w':'')}
+
+async function impSamples(f,no){
+  const t=table(parseCSV(await f.text()),h=>h.some(x=>SIDRE.test(x)));
+  if(!t)return say(f.name+': no sample-number column.','e');
+  const h=t.head,si=h.findIndex(x=>SIDRE.test(x)),oi=ci(h,/^lab_order|order/,/date|status/),
+    tpi=ci(h,/^test_packages$|test.?package/),tyi=ci(h,/^type$|^sample.?type$/),cai=ci(h,/^category$/);
+  if(si<0)return say(f.name+': could not find the sample number column.','e');
+  if(oi>=0){const others=[...new Set(t.body.map(r=>clean(r[oi])).filter(x=>x&&nk(x)!==nk(no)))];
+    if(others.length)return say(f.name+' belongs to order '+others.join(', ')+', not '+no+'. File not attached.','e')}
+  else say(f.name+': no order column in this file, so the order could not be checked.','w');
+  const rows=[],cnt={},dups=[],excl=[],fixed=[];
+  t.body.forEach(r=>{const id=clean(r[si]);if(!id)return;
+    const g=i=>i>=0?clean(r[i]):'';
+    if(EXCL.test(g(tpi)+' '+g(tyi)+' '+g(cai))){excl.push(id);return}   // topicals & edibles are never counted
+    if(cnt[id]){if(cnt[id]==1)dups.push(id);cnt[id]++;return}cnt[id]=1;
+    const ft=fixType(sType(g(tpi),g(tyi),g(cai)),id);if(ft.fixed&&ft.type)fixed.push(id);
+    rows.push({id,type:ft.type,cat:g(cai)})});
+  if(dups.length)return say('Rejected '+f.name+': duplicate sample numbers inside the file: '+dups.join(', ')+'. Fix and re-upload.','e');
+  const clash=[];files.filter(x=>x.k=='samples'&&nk(x.ord)!==nk(no)).forEach(x=>x.d.forEach(s=>{if(cnt[s.id])clash.push(s.id+' (already in order '+x.ord+')')}));
+  if(clash.length)return say('Rejected '+f.name+': sample(s) already in another file: '+clash.join(', ')+'.','e');
+  files=files.filter(x=>!(x.k=='samples'&&nk(x.ord)==nk(no)));
+  files.push({id:++fid,k:'samples',ord:no,name:f.name,at:nowS(),n:rows.length,d:rows,excl:excl.length});
+  // samples added by hand that are in this file: the file wins, and the receipt, type and position carry over
+  const fd={};rows.forEach(r=>fd[dk(r.id)]=r.id);const merged=[];
+  manual=manual.filter(m=>{const to=fd[dk(m.id)];if(!to)return true;merged.push(m.id);
+    if(sRecv[m.id]!==undefined&&sRecv[to]===undefined){sRecv[to]=sRecv[m.id];sSeq[to]=sSeq[m.id]}
+    if(typeOv[m.id]&&!typeOv[to])typeOv[to]=typeOv[m.id];
+    userOrder=userOrder.map(x=>x===m.id?to:x);return false});
+  if(merged.length)say('Order '+no+': '+merged.length+' sample(s) you added by hand are in this file, so they were merged with it: '+merged.join(', ')+'.','w');
+  if(excl.length)say('Order '+no+': '+excl.length+' topical/edible sample(s) left out ('+excl.join(', ')+').','w');
+  if(fixed.length)say('Order '+no+': type was a number or empty, so it was set from the sample number for '+fixed.join(', ')+'.','w');
+  const o=compute().O[nk(no)];
+  if(o&&o.count&&o.count!==rows.length&&o.count!==rows.length+excl.length)say('Order '+no+' expects '+o.count+' samples, but this file has '+rows.length+'.','w');
+  else say('Order '+no+': '+rows.length+' of '+(o&&o.total||rows.length)+' samples loaded.')}
+
+async function impRG(f){
+  const t=table(await readX(f),h=>h.some(x=>/sample/.test(x))&&h.some(x=>/hvy|test|order/.test(x)));
+  if(!t)return say(f.name+': no header row with Sample Number and Order, Test List or HVY.','e');
+  const h=t.head,si=ci(h,/sample/),oi=ci(h,/^order|order\s*(#|no|num)/,/date/),tl=ci(h,/test list|tests/),hv=ci(h,/^hvy$|heavy/,/done/),
+    hd=ci(h,/hvy.*done|done/),du=ci(h,/due/),st=ci(h,/^status/);
+  const rows=[];let ex=0,nohvy=0;
+  t.body.forEach(r=>{const id=clean(r[si]);if(!id)return;const stt=st>=0?clean(r[st]):'';
+    if(/complete|cancel/i.test(stt)){ex++;return}
+    const hv_=(hv>=0&&clean(r[hv])!=='')||(tl>=0&&/hvy|heavy/i.test(clean(r[tl])));
+    if(!hv_){nohvy++;return}
+    rows.push({id,order:oi>=0?clean(r[oi]):'',due:du>=0?pDate(r[du]):'',done:hd>=0&&/done/i.test(clean(r[hd])),status:stt})});
+  const seen={};rows.forEach(r=>{if(seen[r.id])say('Report Generator: sample '+r.id+' appears more than once; the last row is used.','w');seen[r.id]=r});
+  files.push({id:++fid,k:'rg',name:f.name,at:nowS(),n:Object.keys(seen).length,d:Object.values(seen)});
+  say(f.name+': '+Object.keys(seen).length+' open HVY samples ('+ex+' completed or cancelled left out, '+nohvy+' without HVY ignored). The newest Report Generator is the one used.')}
+
+async function impDig(f){
+  const t=table(await readX(f),h=>h.some(x=>/^sample\s*(num|id|#|no)/.test(x)));
+  if(!t)return say(f.name+': no header row with a Sample Number column.','e');
+  const h=t.head,si=ci(h,/sample.*(num|id|#|no)|^sample$/)>=0?ci(h,/sample.*(num|id|#|no)|^sample$/):ci(h,/sample/),ti=ci(h,/type|matrix|product|categor/),wi=ci(h,/weight|wt/);
+  const m=f.name.match(/(\d{1,2})[-_.](\d{1,2})[-_.](\d{4})/);
+  const date=m?m[3]+'-'+pad(+m[1])+'-'+pad(+m[2]):today();
+  const SK=compute().SK,seen={},rows=[],P={dup:[],unknown:[],nowt:[]},all=[];
+  t.body.forEach((r,i)=>{const id=clean(r[si]);if(id&&/[A-Za-z0-9]/.test(id)&&id.length<=40)all.push({id,no:/^\d+$/.test(clean(r[0]))?+clean(r[0]):i+1})});
+  P.twice=findDups(all.map(x=>x.id),all.map(x=>x.no));                // every row, _dup and weighed or not
+  t.body.forEach(r=>{const id=clean(r[si]);
+    if(!id)return;                                                   // empty template rows
+    if(!/[A-Za-z0-9]/.test(id)||id.length>40)return;
+    if(/^blank/i.test(id)||/_dup$/i.test(id))return;                  // QC rows
+    if(wi>=0&&clean(r[wi])===''){P.nowt.push(id);return}              // listed but never weighed = not digested yet
+    if(seen[dk(id)]){if(!P.dup.includes(id))P.dup.push(id);return}seen[dk(id)]=1;
+    if(!SK[dk(id)])P.unknown.push(id);rows.push({id,type:ti>=0?clean(r[ti]):''})});
+  const po={name:f.name,date,rows,P};
+  if(m)acceptDig(po);                                                 // date in the file name: no review needed
+  else if(pend)pendQ.push(po);else pend=po}
+function acceptDig(p){p=p||pend;if(!p)return;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(p.date)){say('Enter a valid digestion date.','e');return render()}
+  // a newer copy of a log already loaded (…_updated) replaces it; any other log that shares samples is flagged
+  const base=n=>String(n).replace(/\.xlsx?$/i,'').replace(/( \(\d+\))+$/,'').replace(/(_updated)+$/i,'').toLowerCase(),same=files.filter(f=>f.k=='dig'&&base(f.name)===base(p.name));
+  if(same.length){files=files.filter(f=>!same.includes(f));say(p.name+' replaces '+same.map(f=>f.name).join(', ')+', the earlier copy of the same log.')}
+  const D=compute().D,P=p.P,notes=[],also=p.rows.filter(r=>D[dk(r.id)]).map(r=>({id:r.id,d:D[dk(r.id)]}));
+  files.push({id:++fid,k:'dig',name:p.name,at:nowS(),n:p.rows.length,date:p.date,d:p.rows});
+  if(P.twice&&P.twice.length)say('Listed twice in '+p.name+': '+dupText(P.twice)+'. Was a sample run twice? Each one is counted once.','e');
+  if(also.length)say('Also in another digestion log: '+also.slice(0,15).map(x=>x.id+' ('+x.d.file+', '+fmtS(x.d.date)+')').join(', ')+(also.length>15?' and '+(also.length-15)+' more':'')+'. Digested twice? The latest date is used.','e');
+  if(P.nowt.length)notes.push(P.nowt.length+' listed without a weight, so not counted as digested');
+  if(P.unknown.length)notes.push(P.unknown.length+' not in any loaded order: '+P.unknown.slice(0,12).join(', ')+(P.unknown.length>12?'…':''));
+  say(p.name+': '+p.rows.length+' samples marked digested on '+fmt(p.date)+'.'+(notes.length?' '+notes.join('. ')+'.':''),notes.length?'w':'');
+  if(p===pend)pend=pendQ.shift()||null;render()}
+function rmFile(id){files=files.filter(f=>f.id!=id);say('File removed and counts updated.');render()}
+
+// ---------- bulk upload: any mix of files, auto-sorted ----------
+const SIDRE=/^(lab_)?sample[\s_]*(number|num|id|#|no\.?)\s*$|^sample$/;
+async function classify(f){const n=f.name.toLowerCase();
+  if(/\.csv$/.test(n)){const rows=parseCSV(await f.text());
+    const t=table(rows,h=>h.some(x=>SIDRE.test(x)));
+    if(t){const oi=ci(t.head,/order/,/date|status/);const os=oi<0?[]:[...new Set(t.body.map(r=>clean(r[oi])).filter(Boolean))];return{k:'samples',os}}
+    return table(rows,h=>h.some(x=>/order/.test(x)))?{k:'orders'}:{k:'?'}}
+  if(/\.xlsx?$/.test(n)){const rows=await readX(f);
+    if(table(rows,h=>h.some(x=>/^sample\s*(num|id|#|no)/.test(x))&&h.some(x=>/weight|wt/.test(x))))return{k:'dig'};
+    if(table(rows,h=>h.some(x=>/sample/.test(x))&&h.some(x=>/hvy|test list|order/.test(x))))return{k:'rg'}}
+  return{k:'?'}}
+function bulkPick(){const i=document.createElement('input');i.type='file';i.multiple=true;i.accept='.csv,.xlsx,.xls';i.onchange=()=>bulk(i.files);i.click()}
+async function bulk(list){const items=[];
+  for(const f of list){if(items.some(x=>x.f.name===f.name)){say(f.name+': dropped twice, the second copy was skipped.','w');continue}
+    try{const c=await classify(f);
+      if(files.some(x=>x.name===f.name)){files=files.filter(x=>x.name!==f.name);say(f.name+': replaced the copy loaded earlier.')}   // a newer download with the same name wins
+      items.push({f,c})}catch(e){say(f.name+': could not be read ('+e.message+').','e')}}
+  const pr={orders:0,samples:1,rg:2,dig:3,'?':9};items.sort((a,b)=>pr[a.c.k]-pr[b.c.k]||a.f.name.localeCompare(b.f.name));
+  const before=Object.keys(compute().O).length;let sc=0;
+  for(const{f,c}of items){try{
+    if(c.k=='orders')await impOrders(f);
+    else if(c.k=='samples'){if(c.os&&c.os.length==1){await impSamples(f,c.os[0]);sc++}else say(f.name+': '+(c.os&&c.os.length>1?'has several orders ('+c.os.join(', ')+')':'has no order column')+'. Open the order in step 2 and use Upload sample file.','e')}
+    else if(c.k=='rg')await impRG(f);else if(c.k=='dig')await impDig(f);
+    else say(f.name+': not recognised as orders, samples, Report Generator or a digestion log.','e')}
+    catch(e){say(f.name+': '+e.message,'e')}}
+  const after=Object.keys(compute().O).length;
+  if(items.length>1)say(items.length+' files sorted; '+(after-before)+' new order(s)'+(sc?', '+sc+' sample file(s) attached':'')+'.');
+  render()}
+(()=>{const d=$('drop');
+  ['dragenter','dragover'].forEach(e=>d.addEventListener(e,ev=>{ev.preventDefault();d.classList.add('over')}));
+  ['dragleave','drop'].forEach(e=>d.addEventListener(e,ev=>{ev.preventDefault();d.classList.remove('over')}));
+  d.addEventListener('drop',ev=>{if(ev.dataTransfer.files.length)bulk(ev.dataTransfer.files)})})();
+
+// ---------- core computation ----------
+function compute(){
+  const O={},S={},D={},R={};let IX=0,OIX=0;   // ix = the order samples were loaded in (never their number); order ix = the order orders were loaded in
+  const mk=(no,x)=>{const k=nk(no);if(!O[k])O[k]=Object.assign({no,k,count:0,placed:'',name:'',ix:OIX++},x||{});return O[k]};
+  files.filter(f=>f.k=='orders').forEach(f=>f.d.forEach(o=>{const pv=O[nk(o.no)]||{};const m={...pv};Object.keys(o).forEach(x=>{if(o[x]!==''&&o[x]!==0&&o[x]!=null)m[x]=o[x];else if(!(x in m))m[x]=o[x]});m.k=nk(o.no);m.ix=pv.ix??OIX++;O[nk(o.no)]=m}));
+  Object.values(manOrders).forEach(m=>{const o=mk(m.no,{placed:m.placed||'',name:m.name||''});if(!o.name&&m.name)o.name=m.name;if(!o.placed&&m.placed)o.placed=m.placed});
+  const rgf=files.filter(f=>f.k=='rg'),rg=rgf.length?rgf[rgf.length-1]:null;
+  const fdk={};
+  files.filter(f=>f.k=='samples').forEach(f=>{mk(f.ord);
+    f.d.forEach(s=>{S[s.id]={id:s.id,order:nk(f.ord),type:s.type,loaded:true,ix:IX++};fdk[dk(s.id)]=1})});
+  manual.forEach(m=>{if(fdk[dk(m.id)])return;const o=mk(m.order);S[m.id]={id:m.id,order:o.k,type:m.type,loaded:true,manual:true,ix:IX++}});   // a sample file wins over a hand-added copy
+  if(rg)rg.d.forEach(r=>{R[r.id]=r;
+    if(!S[r.id])S[r.id]={id:r.id,order:nk(r.order),type:'',loaded:false,ix:IX++};
+    if(S[r.id].order&&!O[S[r.id].order])mk(r.order);
+    S[r.id].rg=r});
+  // the day each order was uploaded here: its day on the calendar unless it is expected or moved
+  const upd_=(k,at)=>{if(O[k]&&at){const d=String(at).slice(0,10);if(!O[k].up||d<O[k].up)O[k].up=d}};
+  files.forEach(f=>{if(f.k=='orders')f.d.forEach(o=>upd_(nk(o.no),f.at));else if(f.k=='samples')upd_(nk(f.ord),f.at)});
+  manual.forEach(m=>upd_(m.k,m.at));if(rg)rg.d.forEach(r=>upd_(nk(r.order),rg.at));
+  Object.keys(coOv).forEach(k=>{if(O[k]&&coOv[k])O[k].name=coOv[k]});
+  Object.keys(removedO).forEach(k=>delete O[k]);Object.keys(S).forEach(id=>{if(removedO[S[id].order])delete S[id]});
+  const rgOrders=new Set(rg?rg.d.map(r=>nk(r.order)):[]);
+  const SK={};Object.values(S).forEach(s=>SK[dk(s.id)]=s);
+  files.filter(f=>f.k=='dig').forEach(f=>f.d.forEach(r=>{const k=dk(r.id);if(!D[k]||f.date>=D[k].date)D[k]={date:f.date,file:f.name};
+    if(SK[k]&&!SK[k].type&&r.type)SK[k].type=r.type}));
+  Object.keys(typeOv).forEach(id=>{if(S[id])S[id].type=typeOv[id]});   // types set by hand in step 3
+  const T=today();
+  Object.values(S).forEach(s=>{const o=O[s.order]||{};s.ono=o.no||'';
+    const so=sRecv[s.id];s.rec=so!==undefined?so:(oRecv[s.order]||null);s.seq=(so!==undefined&&so)?(sSeq[s.id]??1e9):(oSeq[s.order]??1e9);
+    s.dig=D[dk(s.id)]?D[dk(s.id)].date:'';s.done=!!(s.rg&&s.rg.done);
+    s.due=s.rg&&s.rg.due?s.rg.due:(s.rec?addDays(s.rec,cfg.n):'');
+    let st,c;
+    if(s.done){st='Completed';c='g'}else if(s.dig){st='Digested';c='g'}
+    else if(!s.rec){if(s.rg&&s.rg.due&&s.rg.due<T){st='Overdue, not received';c='r'}else if(s.rg&&s.rg.due==T){st='Due today, not received';c='y'}else{st='Not received';c=''}}
+    else if(s.due&&s.due<T){st=files.some(f=>f.k=='dig')?'Overdue, missing from digestion log':'Overdue';c='r'}
+    else if(s.due==T){st='Due today';c='y'}else{st='Waiting for digestion';c='y'}
+    s.st=st;s.c=c});
+  const byO={};Object.values(S).forEach(s=>(byO[s.order]=byO[s.order]||[]).push(s));
+  Object.values(O).forEach(o=>{const L=byO[o.k]||[];o.L=L;
+    o.seq=L.reduce((a,s)=>Math.min(a,s.seq),oSeq[o.k]??1e9);
+    o.loaded=L.filter(s=>s.loaded).length;const ex_=(files.find(f=>f.k=='samples'&&nk(f.ord)==o.k)||{}).excl||0;
+    o.total=(ex_&&o.count===o.loaded+ex_)?o.loaded:(o.count||L.length);o.total=Math.max(o.total,L.length);
+    const extra=oRecv[o.k]?Math.max(0,o.total-L.length):0;
+    o.recv=L.filter(s=>s.rec).length+extra;o.dg=L.filter(s=>s.dig||s.done).length;
+    o.due=L.map(s=>s.due).filter(Boolean).sort()[0]||'';
+    o.inRG=rgOrders.has(o.k);o.rgLoaded=!!rg;
+    const over=L.some(s=>s.c=='r'),dt=L.some(s=>s.st.startsWith('Due today'));
+    let st,c;
+    if(o.total&&o.dg>=o.total){st='Complete';c='g'}
+    else if(over){st='Overdue / missed';c='r'}
+    else if(dt){st='Due today';c='y'}
+    else if(o.recv==0){st=o.rgLoaded&&!o.inRG?'Not received, not in Report Generator yet':'Not received';c=''}
+    else if(o.total&&o.recv<o.total){st='Partly received';c='y'}
+    else if(o.dg>0){st='Digestion in progress';c='y'}
+    else{st=o.rgLoaded&&!o.inRG?'Received, waiting for Report Generator':'Waiting for digestion';c=o.rgLoaded&&!o.inRG?'':'y'}
+    if(o.loaded<o.total&&!o.loaded)st+=' · sample file missing';
+    o.held=hold[o.k]===T&&!oRecv[o.k]&&o.recv==0;
+    if(o.held&&c!='r'){st='Not arriving today';c=''}
+    o.st=st;o.c=c;o.oRec=oRecv[o.k]||null});
+  return{O,S,D,R,T,SK}}
+// ---------- list order: order of orders (default) or by number ----------
+const cmpN=(a,b)=>String(a??'').localeCompare(String(b??''),undefined,{numeric:true});
+const cmpS=(a,b)=>((+tailNo(a.id)||0)-(+tailNo(b.id)||0))||cmpN(a.id,b.id);
+// order of orders: the calendar's line-up (days, then companies as arranged); an arrangement made here until the calendar answers;
+// then the order they were received, then the order they were loaded
+function orderRank(O,forLog){const M=a=>new Map(a.map((no,i)=>[nk(no),i])),g=(m,k)=>m.has(k)?m.get(k):1e6;
+  const pri=M(orderPri),cal=M(dashSeq);
+  const L=Object.values(O).slice().sort(view=='num'&&!forLog?(a,b)=>cmpN(a.k,b.k)||cmpN(a.no,b.no):(a,b)=>(g(pri,a.k)-g(pri,b.k))||(g(cal,a.k)-g(cal,b.k))||(a.seq-b.seq)||(a.ix-b.ix));
+  return new Map(L.map((o,i)=>[o.k,i]))}
+// ---------- line-up: orders by company, the same list as the calendar on the dashboard ----------
+const coK=o=>String(o.name||'').trim().toLowerCase()||'#'+o.k;
+const dayOf=o=>dashDay[o.k]||o.up||'';
+const dayLbl=d=>d?new Date(d+'T12:00').toLocaleDateString(undefined,{weekday:'short',month:'numeric',day:'numeric'}):'No day yet';
+// next to each other, one company's orders on one day form a group; groups are what you arrange
+function groupsOf(list){const G=[];list.forEach(o=>{const key=coK(o),day=dayOf(o);let g=G[G.length-1];if(!g||g.key!==key||g.day!==day)G.push(g={key,day,name:o.name||'',orders:[]});g.orders.push(o)});return G}
+// put a group's orders in front of another order, or at the end; inside the dashboard the calendar keeps the result and sends it back
+function arrMove(keys,beforeK){if(!keys||!keys.length)return;const C=compute(),rank=orderRank(C.O,true),all=Object.keys(C.O).sort((a,b)=>rank.get(a)-rank.get(b));
+  const ks=new Set(keys),mv=all.filter(k=>ks.has(k)),rest=all.filter(k=>!ks.has(k)),i=beforeK?rest.indexOf(beforeK):-1;
+  if(i<0)rest.push(...mv);else rest.splice(i,0,...mv);orderPri=rest;
+  toDash({type:'hmb-arrange',nos:mv.map(k=>C.O[k].no),before:beforeK&&C.O[beforeK]?C.O[beforeK].no:null});render()}
+// the arrows move a company one place within its day
+function arrNudge(keys,dir,G){const i=G.findIndex(g=>g.orders.some(o=>keys.includes(o.k)));if(i<0)return;const g=G[i],h=G[i+dir];
+  if(!h||h.day!==g.day)return;
+  if(dir<0)arrMove(keys,h.orders[0].k);else{const n=G[i+2];arrMove(keys,n&&n.day===g.day?n.orders[0].k:null)}}
+const arrNudgeG=(id,dir)=>arrNudge(GRP[id]||[],dir,GRL[id[0]]||[]);
+function arrReset(){const ks=ordList().map(k=>k.o);userOrder=[];orderPri=[];toDash({type:'hmb-arrange-reset',nos:ks});render()}
+function setCo(k,v){v=String(v||'').trim();if(v)coOv[k]=v;else delete coOv[k];editCo=null;render()}
+function sortSamples(L,O){const r=orderRank(O);return L.slice().sort(view=='num'?cmpS:(a,b)=>((r.get(a.order)??1e6)-(r.get(b.order)??1e6))||(a.ix-b.ix))}
+const setView=v=>{view=v;render()};
+
+// ---------- actions ----------
+const rmOrder=k=>{removedO[k]=1;
+  [...new Set(manual.filter(m=>m.k===k&&m.mid!=null).map(m=>m.mid))].forEach(id=>{if(manual.filter(m=>m.mid===id).every(m=>m.k===k))toDash({type:'hmb-manual-removed',id})});
+  if(expand==k)expand=null;say('Order removed from the dashboard and the log. Bring it back under Extras, Hidden orders.');render()};
+const rmHeld=()=>{const O=compute().O;let n=0;Object.values(O).forEach(o=>{if(o.held){removedO[o.k]=1;n++}});say(n+' not-arriving-today order(s) hidden.');render()};
+const restoreRm=()=>{const n=Object.keys(removedO).length;removedO={};say(n+' order(s) restored.');render()};
+const holdOrder=k=>{hold[k]=today();render()};const unholdOrder=k=>{delete hold[k];render()};
+// receiving or un-receiving a whole order clears single-sample overrides, so no sample gets stuck
+const clearS=k=>{Object.values(compute().S).forEach(s=>{if(s.order===k){delete sRecv[s.id];delete sSeq[s.id]}})};
+const recvOrder=k=>{delete hold[k];clearS(k);oRecv[k]=nowS();oSeq[k]=++rseq;render()};
+const undoOrder=k=>{clearS(k);delete oRecv[k];delete oSeq[k];render()};
+const recvSample=id=>{sRecv[id]=nowS();sSeq[id]=++rseq;render()};
+const undoSample=id=>{sRecv[id]=null;render()};
+function setTypeOv(id,v){const ft=fixType(v,id);if(ft.reject){say(id+': topicals and edibles are not digested. Type not changed.','e');return render()}
+  if(ft.type)typeOv[id]=ft.type;else delete typeOv[id];const m=manual.find(x=>x.id===id);if(m)m.type=ft.type;render()}
+const csvQ=v=>{v=String(v??'');return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
+function exportRows(){const{S,O}=compute();
+  return sortSamples(Object.values(S),O).map(s=>{const o=O[s.order]||{};
+    return{'Order Number':o.no||s.order,'Sample Number':s.id,'Sample Type':s.type,'Order Date':fmt(o.placed),
+      'Received':s.rec?'Yes':'No','Received Date':s.rec?fmtT(s.rec):'','Digested':s.dig?'Yes':'No',
+      'Digestion Date':s.dig?fmt(s.dig):'','Due Date':s.due?fmt(s.due):'',
+      'HVY Status':s.rg?(s.done?'Done':'Open'):'Not in Report Generator','Current Status':s.st,
+      'Notes':s.manual?'Added by hand':s.loaded?'':'Sample file not loaded'}})}
+async function dl(blob,name){
+  let d=null;try{d=window.claude&&await window.claude.use('downloads')}catch(e){}
+  if(d){try{await d.save({filename:name,data:blob});say(name+': saved.')}catch(e){say(name+': '+(e&&e.code=='declined'?'download cancelled.':'download failed ('+(e&&e.code||e&&e.message||'error')+').'),e&&e.code=='declined'?'w':'e')}render();return}
+  if(window.parent!==window){                                                         // embedded in the dashboard: it saves the file for us
+    try{window.parent.postMessage({type:'hmb-download',filename:name,data:await blob.arrayBuffer()},'*');say(name+': sent to the dashboard to save.');render();return}catch(e){}}
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),999)}
+function expTwice(r){const d=findDups(r.map(x=>x['Sample Number']),r.map((x,i)=>i+2));if(d.length)say('Listed twice in the status export: '+dupText(d,'row ')+'.','e')}
+function expCSV(){const r=exportRows();if(!r.length){say('Nothing to export yet.','w');return render()}expTwice(r);
+  const h=Object.keys(r[0]);dl(new Blob(['﻿'+[h.map(csvQ).join(',')].concat(r.map(x=>h.map(k=>csvQ(x[k])).join(','))).join('\r\n')],{type:'text/csv'}),'digestion_status_'+today()+'.csv')}
+function expXLSX(){const r=exportRows();if(!r.length){say('Nothing to export yet.','w');return render()}expTwice(r);
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(r),'Digestion Status');dl(new Blob([XLSX.write(wb,{type:'array',bookType:'xlsx'})],{type:'application/octet-stream'}),'digestion_status_'+today()+'.xlsx')}
+
+// ---------- digestion log rows (shared by new log and update) ----------
+const isC=s=>/_C_/i.test(s.id)||(!/_P_/i.test(s.id)&&!/flower|trim|pre-?roll|shake|plant/i.test(s.type||''));
+const inToday=o=>chartOn?chartSeq.some(x=>nk(x)===nk(o.no)):(o.placed||'')==today();
+// ---------- log header: analyst, IDs, reagents (saved in this browser; old saved lot numbers carry over) ----------
+const HDR_DEF={analyst:'DC',balance:'9',digestor:'DIG03',instrument:'The Dude',tube:'2512282',
+  water_b:'IBIS Scientific',water:'2620201',water_p:'P5K-9',hno3_b:'VWR',hno3:'1126051',hno3_p:'P5K-9',
+  h2o2_b:'Sigma Aldrich',h2o2:'66112619',h2o2_p:'P5K-9',hcl_b:'Sigma Aldrich',hcl:'66079',hcl_p:'P1K-16',
+  au_b:'HMAU-75',au:'2027-01-27',au_p:'P200-10',is_b:'HMIS-54',is:'2026-12-21',is_p:'P5K-5'};
+let H={...HDR_DEF};try{Object.assign(H,JSON.parse(localStorage.getItem('hmb.lots')||'{}'))}catch(e){}
+H.is_b='HMIS-54';H.is='2026-12-21';   // HARD CODED for now: internal standard HMIS-54 expires 12-21-2026
+const REAG=[['water','DI water (2 mL)','Brand','Lot #'],['hno3','HNO₃ (2 mL)','Brand','Lot #'],['h2o2','H₂O₂ (2 mL)','Brand','Lot #'],['hcl','HCl (0.5 mL)','Brand','Lot #'],
+  ['au','Gold solution 100 ppm (0.1 mL)','Lot #','Expiry'],['is','Internal standard','Lot #','Expiry']];
+const prep=()=>prepDate||today();
+function setHdr(k,v){H[k]=String(v??'').trim();try{localStorage.setItem('hmb.lots',JSON.stringify(H))}catch(e){}render()}
+function renderHdr(){const el=$('lotbox');if(!el)return;
+  const f=(k,lab,type)=>'<label>'+esc(lab)+'<input id="h_'+k+'" '+(type?'type="'+type+'" ':'')+'value="'+esc(H[k])+'" onchange="setHdr(\''+k+'\',this.value)"></label>';
+  el.innerHTML='<div class="hgrid" style="margin-top:10px"><label>Sample prep date<input type="date" id="h_prep" value="'+prep()+'" onchange="prepDate=this.value;render()"></label>'+
+    f('analyst','Prep analyst')+f('balance','Balance ID')+f('digestor','Digestor ID')+f('instrument','Instrument ID')+f('tube','50 mL tube lot #')+'</div>'+
+    '<div class="scroll" style="margin-top:10px"><table class="reag"><tr><th>Reagent</th><th>Brand / ID</th><th>Lot # / expiry</th><th>Pipette</th></tr>'+
+    REAG.map(([k,lab])=>'<tr><td class="small">'+esc(lab)+'</td><td><input value="'+esc(H[k+'_b'])+'" onchange="setHdr(\''+k+'_b\',this.value)" aria-label="'+esc(lab)+' brand or ID"></td>'+
+      '<td><input '+(k=='au'||k=='is'?'type="date" ':'')+'value="'+esc(H[k])+'" onchange="setHdr(\''+k+'\',this.value)" aria-label="'+esc(lab)+(k=='au'||k=='is'?' expiry':' lot number')+'"></td>'+
+      '<td><input value="'+esc(H[k+'_p'])+'" onchange="setHdr(\''+k+'_p\',this.value)" aria-label="'+esc(lab)+' pipette"></td></tr>').join('')+'</table></div>'+
+    '<p class="muted small">Saved in this browser. The dashboard and this page keep their own copies, so check both if you use both.</p>'}
+// red = expired on the prep date, amber = expires within 14 days or missing
+function hdrIssues(){const P=prep(),out=[];
+  [['au','Gold solution '+H.au_b],['is','Internal standard '+H.is_b]].forEach(([k,n])=>{const v=H[k];
+    if(!/^\d{4}-\d\d-\d\d$/.test(v||''))out.push({k:'w',t:n+': no expiry date.'});
+    else if(v<P)out.push({k:'e',t:n+' expired on '+fmt(v)+'.'});
+    else if(v<=addDays(P,14))out.push({k:'w',t:n+' expires '+fmt(v)+'.'})});
+  [['tube','50 mL tube lot'],['water','DI water lot'],['hno3','HNO₃ lot'],['h2o2','H₂O₂ lot'],['hcl','HCl lot'],['analyst','Prep analyst']].forEach(([k,n])=>{if(!String(H[k]||'').trim())out.push({k:'w',t:n+' is blank.'})});
+  return out}
+const hdrBlocked=()=>!hdrAck&&hdrIssues().some(x=>x.k=='e');
+// samples waiting for the log, with the type rule applied; returns {L, fixed, rejected, guess}
+function logSamples(all){const{S,O}=compute(),fixed=[],rejected=[],guess=[],L=[];
+  const base=Object.values(S).filter(s=>!s.dig&&!s.done&&(all||scope=='all'||scope=='today'||s.rec)&&(all||scope!='today'||inToday(O[s.order]||{}))&&(!odate||((O[s.order]||{}).placed||'')==odate)).sort((a,b)=>(a.seq-b.seq)||(a.ix-b.ix));   // order received, then the order in the sample file
+  const rank=orderRank(O,true),pos=id=>{const i=userOrder.indexOf(id);return i<0?1e6:i};
+  base.sort((a,b)=>((rank.get(a.order)??1e6)-(rank.get(b.order)??1e6))||(view=='num'?cmpS(a,b):(pos(a.id)-pos(b.id))||(a.ix-b.ix)));   // whole orders in order of orders, never split by type
+  base.forEach(s=>{
+    const ft=fixType(s.type,s.id);if(ft.reject){rejected.push(s.id);return}
+    if(ft.fixed&&ft.type)fixed.push(s.id);if(!ft.type)guess.push(s.id);
+    const o=O[s.order]||{};
+    L.push({id:String(s.id).trim(),type:ft.type,order:s.ono||s.order,company:o.name||'',placed:o.placed||''})});
+  return{L,fixed,rejected,guess}}
+// ---------- more than one rotor load ----------
+const ROTOR=41,PATS=[8,12,16,24,32,41];
+// the dashboard's optimizer rules: Anton Paar patterns only, fewest runs, then fewest balance blanks
+function bestRuns(n){if(n<=ROTOR)return[PATS.find(a=>a>=n)||ROTOR];
+  const full=Math.max(0,Math.ceil(n/ROTOR)-3),rest=n-ROTOR*full,out=[];
+  const add=s=>{const t=s.reduce((a,b)=>a+b,0);if(t<rest)return;out.push({s,c:s.reduce((a,x)=>a+(x<=12?1:0)+10,0)+(t-rest),b:t-rest,i:out.length})};
+  PATS.forEach(a=>{add([a]);PATS.filter(b=>b<=a).forEach(b=>{add([a,b]);if(rest>2*ROTOR)PATS.filter(c=>c<=b).forEach(c=>add([a,b,c]))})});
+  out.sort((x,y)=>x.c-y.c||x.b-y.b||x.i-y.i);return Array(full).fill(ROTOR).concat(out[0].s)}
+const tubesOf=(L,need,o)=>L.length?buildRows(L,need,o).length:0;
+// the longest run of samples, in log order, that fits cap tubes once blanks and dups are added
+function fitPrefix(L,cap,need,o){let k=0;while(k<L.length&&tubesOf(L.slice(0,k+1),need,o)<=cap)k++;return{L:L.slice(0,k),carry:L.slice(k)}}
+const planSize=()=>plan=='c41'?41:plan=='c32'?32:0;
+// what goes in today's log: everything, or one run with the rest carried to the next day
+function logPlan(){const x=logSamples(),tubes=tubesOf(x.L),over=tubes>ROTOR;let L=x.L,carry=[];
+  if(over&&planSize()){const f=fitPrefix(x.L,planSize());L=f.L;carry=f.carry}
+  return{...x,all:x.L,L,carry,tubes,over,ready:!over||!!plan}}
+const setPlan=v=>{plan=v;render()};
+// QC rules: the samples stay in order of orders. Blank X and Blank Y head a new log; each _dup sits right after its original.
+// A _dup is added for the first flower, and for concentrates for the first sample of the preferred type: Badder/Budder, then Live Rosin, then Distillate.
+// Adding to a log (opts.update): a missing Blank X goes right before the first new flower, a missing Blank Y right before the first new concentrate.
+// Concentrates in their own zone (concZone): all flower first, then all concentrates, each part in order of orders; Blank X heads the flower and Blank Y the concentrates.
+const DUP_PREF=[/badder|budder|batter/i,/live\s*r[eo]sin/i,/distillate/i];
+function dupIndex(a){for(const re of DUP_PREF){const i=a.findIndex(s=>re.test(s.type||''));if(i>=0)return i}return 0}
+// the flower _dup is made from the first real flower, never a trim sample
+const flowerIndex=a=>{let i=a.findIndex(x=>/flower/i.test(x.type||'')&&!/trim/i.test(x.type||''));return i>=0?i:a.findIndex(x=>!/trim/i.test(x.type||''))};
+function buildRows(L,need,opts){need=Object.assign({p:true,c:true},need||{});need.dp=need.dp??need.p;need.dc=need.dc??need.c;opts=opts||{};
+  let rows=L.map(s=>({id:s.id,type:s.type,w:null}));const pl=rows.filter(r=>!isC(r)),co=rows.filter(isC),dup=new Set();
+  if(concZone)rows=pl.concat(co);
+  if(need.dp&&pl.length){const i=flowerIndex(pl);if(i>=0)dup.add(pl[i])}
+  if(need.dc&&co.length)dup.add(co[dupIndex(co)]);
+  const bx={id:'Blank X',type:'Flower',w:0.25},by={id:'Blank Y',type:'Concentrates',w:0.1},out=[];
+  let needX=!!(pl.length&&need.p),needY=!!(co.length&&need.c);
+  if(!opts.update&&!concZone){if(needX)out.push(bx);if(needY)out.push(by);needX=needY=false}
+  rows.forEach(r=>{const c=isC(r);if(!c&&needX){out.push(bx);needX=false}if(c&&needY){out.push(by);needY=false}
+    out.push(r);if(dup.has(r))out.push({id:r.id+'_dup',type:r.type,w:null})});
+  return out}
+// ---------- dashboard link: share the order list, and take the run order back ----------
+let lastOrdersSig='';
+function announceOrders(force){try{if(window.parent===window)return;
+  const O=Object.values(compute().O).sort((a,b)=>a.k.localeCompare(b.k)).map(o=>({no:o.no,company:o.name||'',placed:o.placed||'',up:o.up||'',recv:o.oRec||o.L.map(s=>s.rec).filter(Boolean).sort()[0]||'',samples:o.total,digested:!!(o.total&&o.dg>=o.total)}));
+  const sig=JSON.stringify(O);if(sig===lastOrdersSig&&!force)return;lastOrdersSig=sig;
+  window.parent.postMessage({type:'hmb-orders',orders:O},'*')}catch(e){}}
+// the dashboard answers every order list with the calendar's line-up; it replaces an arrangement made here
+window.addEventListener('message',e=>{const d=e.data;if(!d||d.type!=='hmb-order-seq'||!Array.isArray(d.seq))return;
+  const sig=JSON.stringify([d.seq,d.days||0,d.today||0,!!d.chart]);if(sig===lastSeqSig)return;lastSeqSig=sig;
+  const O=Object.values(compute().O),to=x=>{const o=O.find(y=>nk(y.no)===nk(x));return o?o.no:String(x)};
+  dashSeq=d.seq.map(String);dashDay={};Object.entries(d.days||{}).forEach(([no,day])=>{dashDay[nk(no)]=day});orderPri=[];
+  if(Array.isArray(d.today)){chartSeq=d.today.map(to);chartOn=!!d.chart||d.today.length>0}render()});
+function announceLog(fileName,rows,populate,carried){try{if(window.parent===window)return false;
+  const rs=rows.filter(r=>r.name).map(r=>({name:String(r.name),type:String(r.type||''),order:r.order||'',company:r.company||''}));
+  const expected=rs.filter(r=>!/^blank\s*[xy]/i.test(r.name)&&!/_dup$/i.test(r.name)).length;   // samples expected: no blanks, no dups
+  window.parent.postMessage({type:'hmb-log',fileName,populate:!!populate,expected,rows:rs,carried:(carried||[]).map(s=>s.id)},'*');return true}catch(e){return false}}
+const logName=()=>{const[y,m,d]=prep().split('-').map(Number);return m+'-'+d+'-'+y+'_Heavy_Metal_Digestion_Log'};
+const withInfo=(rows,L)=>{const inf={};L.forEach(s=>inf[s.id]=s);return rows.map(r=>{const s=inf[r.id]||inf[r.id.replace(/_dup$/i,'')]||{};return{name:r.id,type:r.type,order:s.order,company:s.company}})};
+// Populate: send the finished log to the dashboard without downloading it
+function populate(){const p=logPlan(),L=p.L;
+  if(!p.ready){say('More than 41 tubes: choose two runs or carry over in step 3 first.','w');return render()}
+  if(hdrBlocked()){say('A reagent in the log header has expired. Update it, or tick Make the log anyway.','e');return render()}
+  if(!L.length){say('No samples to send yet.','w');return render()}
+  const ok=announceLog(logName()+' (populated)',withInfo(buildRows(L),L),true,p.carry);
+  if(ok)announceOrders(true);   // the dashboard also gets the order list again
+  logNotes(p);
+  const tw=findDups(buildRows(L).map(r=>r.id));if(ok&&tw.length)say('The log sent to the dashboard lists '+dupText(tw)+' twice.','e');
+  say(ok?'Sent to the dashboard: '+L.length+' samples plus blanks and duplicates'+(p.carry.length?', '+p.carry.length+' carried to the next day':'')+'. The next steps are filled in.':'Populate sends the log to the dashboard, so it only works when this tool is open inside the dashboard.',ok?'':'w');render()}
+function logNotes(x){if(x.rejected.length)say('Left out of the log (topical or edible): '+x.rejected.join(', ')+'.','w');
+  if(x.fixed.length)say('Type set from the sample number for '+x.fixed.join(', ')+'.','w')}
+
+// numbers without a leading zero stay numbers (as before); anything else, like 0066079, stays text so no digit is lost
+const numish=v=>{v=String(v??'').trim();return /^[1-9]\d{0,14}$/.test(v)?+v:v};
+async function expLog(){
+  const p=logPlan(),L=p.L;
+  if(!L.length){say('No samples are waiting for digestion.','w');return render()}
+  if(!p.ready){say('More than 41 tubes: choose two runs or carry over in step 3 first.','w');return render()}
+  if(hdrBlocked()){say('A reagent in the log header has expired. Update it, or tick Make the log anyway.','e');return render()}
+  if(typeof ExcelJS==='undefined'){say('The Excel writer did not load. Check the internet connection and refresh.','e');return render()}
+  const wb=new ExcelJS.Workbook(),ws=wb.addWorksheet('Worklist');
+  [6.6,26,17.4,12.6,14.1,11.3,14].forEach((w,i)=>ws.getColumn(i+1).width=w);
+  const th={style:'thin'},bd={top:th,left:th,bottom:th,right:th},ctr={horizontal:'center',vertical:'middle',wrapText:true},
+    fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFEDEDED'}};
+  const L_='ABCDEFG';
+  const put=(a,v,o)=>{o=o||{};const c=ws.getCell(a);c.value=v;c.alignment=ctr;c.border=bd;c.font={name:'Calibri',size:o.sz||11,bold:!!o.b};if(o.f)c.fill=fill;if(o.fmt)c.numFmt=o.fmt;return c};
+  const mg=(rg,v,o)=>{const[a,b]=rg.split(':'),r1=+a.slice(1),r2=+b.slice(1);ws.mergeCells(rg);
+    for(let r=r1;r<=r2;r++)for(let c=L_.indexOf(a[0]);c<=L_.indexOf(b[0]);c++)put(L_[c]+r,null,o);put(a,v,o)};
+  const dt=(y,m,d)=>new Date(Date.UTC(y,m-1,d)),[ty,tm,td]=prep().split('-').map(Number),lotV=k=>{const v=H[k]||'';return /^\d{4}-\d\d-\d\d$/.test(v)?dt(...v.split('-').map(Number)):numish(v)};
+  mg('A1:B1','Sample Prep Date:',{b:1});put('C1',dt(ty,tm,td),{f:1,fmt:'mm-dd-yy'});put('D1','Prep Analyst/s:',{b:1});mg('E1:G1',H.analyst||null,{f:1});
+  mg('A2:B2','Target Sample Wt.:',{b:1});mg('C2:G2','Plant Material: 0.24 - 0.26g \nConcentrate and Extracts: 0.09 - 0.11g',{b:1});
+  mg('A3:B3','50 mL tube lot #',{b:1});put('C3',lotV('tube'),{f:1});put('D3','Balance ID:',{b:1});put('E3',numish(H.balance),{f:1});put('F3','Digestor ID:',{b:1});put('G3',H.digestor||null,{f:1});
+  mg('A4:E4','Reagents Used:',{b:1});mg('F4:G4','Pipette ID Used:',{b:1});
+  const sub=(a,b)=>({richText:[{text:a},{text:b[0],font:{vertAlign:'subscript'}},{text:b.slice(1)}]});
+  const rg=[['2 mL of DI water (Brand/Lot #):',H.water_b,lotV('water'),H.water_p],
+    [sub('2 mL of HNO','3 (Brand/Lot #):'),H.hno3_b,lotV('hno3'),H.hno3_p],
+    [sub('2 mL of H','2O2 (Brand/Lot#)'),H.h2o2_b,lotV('h2o2'),H.h2o2_p],
+    ['0.5 mL of HCl (Brand/Lot #)',H.hcl_b,lotV('hcl'),H.hcl_p],
+    ['0.1 mL of 100 ppm Gold solution (Lot #/Expiry Date):',H.au_b,lotV('au'),H.au_p],
+    ['Internal Standard Used (Lot #/Expiry Date):',H.is_b,lotV('is'),H.is_p]];
+  rg.forEach((x,i)=>{const r=5+i;mg('A'+r+':C'+r,x[0]);put('D'+r,x[1]||null,{sz:8});put('E'+r,x[2]===''?null:x[2],{sz:8,fmt:x[2] instanceof Date?'mm-dd-yy':undefined});mg('F'+r+':G'+r,x[3]||null)});
+  mg('A11:G11',null);mg('A12:G12','Data File Folder',{b:1,sz:12,f:1});
+  mg('A13:B13','Instrument ID:',{sz:10});put('C13',H.instrument||null,{b:1,sz:10,f:1});put('D13','Batch Sequence:',{b:1,sz:10});mg('E13:G13',null);mg('A14:G14',' ');
+  [18,32.25,15,15,15,0,0,0,0,0,15.75,15.75,25.5,0,25.5].forEach((h,i)=>{if(h)ws.getRow(i+1).height=h});
+  ['#','Sample Number','Sample Type','Sample Weight (g)','Final Volume','Total Dilution','Notes'].forEach((h,i)=>put(L_[i]+15,h,{b:1}));
+  const rows=buildRows(L);
+  const N=Math.max(88,rows.length);
+  for(let i=0;i<N;i++){const r=16+i,x=rows[i]||{};
+    put('A'+r,i+1);put('B'+r,x.id||null);put('C'+r,x.type||null);put('D'+r,x.w??null);put('E'+r,50);
+    put('F'+r,{formula:'IF(D'+r+'="","",E'+r+'/D'+r+')'});put('G'+r,null)}   // blank until a weight is entered, no #DIV/0!
+  const buf=await wb.xlsx.writeBuffer();
+  logNotes(p);
+  const tw=findDups(rows.map(r=>r.id));if(tw.length)say('The log you downloaded lists '+dupText(tw)+' twice.','e');
+  say('New log: '+L.length+' samples plus blanks and duplicates, prep date '+fmt(prep())+'.'+(p.carry.length?' '+p.carry.length+' sample(s) carried to the next day.':''));
+  const fname=logName()+'.xlsx';
+  await dl(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),fname);   // save first, then tell the dashboard
+  announceLog(fname,withInfo(rows,L),false,p.carry)}
+
+// ---------- add to an existing log in place (only the Worklist sheet's cells change) ----------
+const NS='http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+async function updPick(){pick('.xlsx',async f=>{
+  if(typeof JSZip==='undefined')return say('The Excel editor did not load. Check the internet connection and refresh.','e');
+  const buf=await f.arrayBuffer(),wb=XLSX.read(buf,{type:'array'});
+  const sn=wb.SheetNames.find(n=>/worklist/i.test(n))||wb.SheetNames[0],ws=wb.Sheets[sn];
+  if(!ws||!ws['!ref'])return say(f.name+': the Worklist sheet is empty.','e');
+  const rg=XLSX.utils.decode_range(ws['!ref']),v=(r,c)=>{const x=ws[XLSX.utils.encode_cell({r,c})];return x?clean(x.v):''};
+  let hdr=-1;for(let r=0;r<=rg.e.r;r++)if(v(r,1)==='Sample Number'){hdr=r;break}
+  if(hdr<0)return say(f.name+': no "Sample Number" header in column B.','e');
+  let last=hdr,lastNum=hdr,count=0;const have={},unknown=[],existing=[],SK=compute().SK;let hasP=false,hasC=false,dupP=false,dupC=false;
+  for(let r=hdr+1;r<=rg.e.r;r++){const id=v(r,1);if(v(r,0)!==''||v(r,4)!=='')lastNum=r;if(!id)continue;last=r;count++;have[dk(id)]=1;existing.push({name:id,type:v(r,2)});
+    if(/^blank\s*x/i.test(id))hasP=true;else if(/^blank\s*y/i.test(id))hasC=true;else if(/_dup$/i.test(id)){if(isC({id,type:v(r,2)}))dupC=true;else dupP=true}
+    else{if(isC({id,type:v(r,2)}))hasC=true;else hasP=true;if(!SK[dk(id)])unknown.push(id)}}
+  const ex=[];for(let r=hdr+1;r<=rg.e.r;r++){const id=v(r,1);if(id)ex.push({id,row:r+1})}
+  const twice=findDups(ex.map(x=>x.id),ex.map(x=>x.row));
+  upd={existing,name:f.name,buf,sheet:sn,hdr,lastNum,last,count,have,unknown,twice,need:{p:!hasP,c:!hasC,dp:!dupP,dc:!dupC},off:new Set()};
+  if(twice.length)say('Listed twice in '+f.name+': '+dupText(twice,'row ')+'. Check the log before adding to it.','e');
+  say(f.name+': '+count+' tube'+(count==1?'':'s')+' already in the log. Pick the samples to add in step 3.')})}
+// what adding would do right now: candidates (in the chosen group, not in the log yet), your picks, and the over-41 plan
+function updCalc(){const u=upd,x=logSamples(),cand=x.L.filter(s=>!u.have[dk(s.id)]),o={update:true};
+  let L=cand.filter(s=>!u.off.has(s.id)),carry=[];
+  const total=u.count+tubesOf(L,u.need,o),over=total>ROTOR;
+  if(over&&planSize()){const f=fitPrefix(L,planSize()-u.count,u.need,o);L=f.L;carry=f.carry}
+  const rows=buildRows(L,u.need,o).map((r,i)=>({...r,row:u.last+2+i}));   // Excel row numbers, 1-based
+  return{x,cand,L,rows,carry,total,over,ready:!over||!!plan,after:u.count+rows.length,extra:rows.filter(r=>r.row-1>u.lastNum).length}}
+const updToggle=(id,on)=>{if(on)upd.off.delete(id);else upd.off.add(id);render()};
+const updAll=on=>{if(on)upd.off.clear();else updCalc().cand.forEach(s=>upd.off.add(s.id));render()};
+function cellRef(c,r){return c+r}
+function colIdx(ref){const m=ref.match(/^[A-Z]+/)[0];let n=0;for(const ch of m)n=n*26+ch.charCodeAt(0)-64;return n}
+async function updSave(){if(!upd)return;const c=updCalc();if(!c.rows.length)return;
+  if(!c.ready){say('The log would have more than 41 tubes: choose two runs or carry over first.','w');return render()}
+  try{
+  const zip=await JSZip.loadAsync(upd.buf);
+  const wbx=new DOMParser().parseFromString(await zip.file('xl/workbook.xml').async('string'),'application/xml');
+  const rels=new DOMParser().parseFromString(await zip.file('xl/_rels/workbook.xml.rels').async('string'),'application/xml');
+  const sh=[...wbx.getElementsByTagNameNS(NS,'sheet')].find(s=>s.getAttribute('name')===upd.sheet);
+  const rid=sh.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships','id');
+  const rel=[...rels.getElementsByTagName('Relationship')].find(r=>r.getAttribute('Id')===rid);
+  let path=rel.getAttribute('Target');path=path.startsWith('/')?path.slice(1):'xl/'+path.replace(/^\.\//,'');
+  const raw=await zip.file(path).async('string'),doc=new DOMParser().parseFromString(raw,'application/xml');
+  const sd=doc.getElementsByTagNameNS(NS,'sheetData')[0],rowsEl=()=>[...sd.getElementsByTagNameNS(NS,'row')];
+  const getRow=n=>{let el=rowsEl().find(r=>+r.getAttribute('r')===n);if(el)return el;
+    el=doc.createElementNS(NS,'row');el.setAttribute('r',n);const after=rowsEl().find(r=>+r.getAttribute('r')>n);sd.insertBefore(el,after||null);return el};
+  const styleAbove=(col,n)=>{for(let r=n-1;r>0&&r>=n-200;r--){const re=rowsEl().find(x=>+x.getAttribute('r')===r);if(!re)continue;
+      const c=[...re.getElementsByTagNameNS(NS,'c')].find(c=>c.getAttribute('r')===col+r);if(c&&c.getAttribute('s'))return c.getAttribute('s')}return null};
+  const setCell=(col,n,val)=>{const re=getRow(n),ref=cellRef(col,n);let c=[...re.getElementsByTagNameNS(NS,'c')].find(x=>x.getAttribute('r')===ref);
+    if(!c){c=doc.createElementNS(NS,'c');c.setAttribute('r',ref);const s=styleAbove(col,n);if(s)c.setAttribute('s',s);
+      const after=[...re.getElementsByTagNameNS(NS,'c')].find(x=>colIdx(x.getAttribute('r'))>colIdx(ref));re.insertBefore(c,after||null)}
+    while(c.firstChild)c.removeChild(c.firstChild);c.removeAttribute('t');
+    if(val&&val.f){const f=doc.createElementNS(NS,'f');f.textContent=val.f;c.appendChild(f)}
+    else if(typeof val==='number'){const v=doc.createElementNS(NS,'v');v.textContent=String(val);c.appendChild(v)}
+    else if(val!=null&&val!==''){c.setAttribute('t','inlineStr');const is=doc.createElementNS(NS,'is'),t=doc.createElementNS(NS,'t');t.textContent=String(val);t.setAttribute('xml:space','preserve');is.appendChild(t);c.appendChild(is)}};
+  let maxR=0;
+  c.rows.forEach(r=>{const n=r.row;maxR=Math.max(maxR,n);
+    if(n-1>upd.lastNum){setCell('A',n,n-1-upd.hdr);setCell('E',n,50);setCell('F',n,{f:'IF(D'+n+'="","",E'+n+'/D'+n+')'})}  // past the template: build the row
+    setCell('B',n,r.id);setCell('C',n,r.type||null);if(r.w!=null)setCell('D',n,r.w)});
+  const dim=doc.getElementsByTagNameNS(NS,'dimension')[0];
+  if(dim){const m=(dim.getAttribute('ref')||'').match(/^([A-Z]+\d+):([A-Z]+)(\d+)$/);if(m&&+m[3]<maxR)dim.setAttribute('ref',m[1]+':'+m[2]+maxR)}
+  const decl=(raw.match(/^<\?xml[^>]*\?>/)||['<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'])[0];
+  zip.file(path,decl+'\n'+new XMLSerializer().serializeToString(doc.documentElement));
+  if(c.extra){const calc=wbx.getElementsByTagNameNS(NS,'calcPr')[0];if(calc){calc.setAttribute('fullCalcOnLoad','1');
+    const wraw=await zip.file('xl/workbook.xml').async('string');zip.file('xl/workbook.xml',(wraw.match(/^<\?xml[^>]*\?>/)||[''])[0]+new XMLSerializer().serializeToString(wbx.documentElement))}}
+  const blob=await zip.generateAsync({type:'blob',compression:'DEFLATE',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  logNotes(c.x);
+  say(upd.name+': '+c.rows.length+' rows added at rows '+c.rows[0].row+' to '+c.rows[c.rows.length-1].row+'. Weights are blank for you to fill in.'+(c.carry.length?' '+c.carry.length+' sample(s) carried to the next day.':''));
+  const name=upd.name.replace(/\.xlsx$/i,'').replace(/_updated$/i,'')+'_updated.xlsx';   // never _updated_updated
+  const ann=upd.existing.concat(withInfo(c.rows,c.L));upd=null;await dl(blob,name);announceLog(name,ann,false,c.carry)
+  }catch(e){say('Could not update the log ('+e.message+'). The original file is unchanged.','e');render()}}
+
+// ---------- flash-through of an order's sample numbers ----------
+function flStart(k){const C=compute(),o=C.O[k];if(!o||!o.L.length){say('No sample numbers loaded for this order yet. Upload its sample file first.','w');return render()}
+  flk=k;flL=sortSamples(o.L,C.O).map(s=>s.id);flI=0;flP=false;clearTimeout(flT);
+  $('fo').innerHTML='<div style="font-size:24px;opacity:.8">Order '+esc(o.no)+'</div>';
+  $('fs').value=cfg.ms;$('fv').textContent=(cfg.ms/1000).toFixed(1)+' s per sample';
+  $('fl').classList.add('on');$('fp').textContent='Pause';flShow()}
+function flShow(){const n=$('fn'),c=$('fc');
+  if(flI>=flL.length){n.textContent='Done';c.textContent=flL.length+' samples shown';return}
+  n.textContent=flL[flI];c.textContent=(flI+1)+' / '+flL.length;
+  flT=setTimeout(()=>{if(!flP){flI++;flShow()}},cfg.ms)}
+function flToggle(){flP=!flP;$('fp').textContent=flP?'Resume':'Pause';
+  if(!flP&&flI<flL.length){clearTimeout(flT);flI++;flShow()}}
+function flClose(){clearTimeout(flT);flk=null;$('fl').classList.remove('on')}
+document.addEventListener('keydown',e=>{if(!flk)return;if(e.key=='Escape')flClose();else if(e.key==' '){e.preventDefault();flToggle()}
+  else if(e.key=='ArrowRight'&&flI<flL.length-1){clearTimeout(flT);flP=true;flI++;flShow();$('fp').textContent='Resume'}
+  else if(e.key=='ArrowLeft'&&flI>0){clearTimeout(flT);flP=true;flI--;flShow();$('fp').textContent='Resume'}});
+
+// ---------- remember the day's work in this browser ----------
+// Saved after every change and picked up again after a refresh. It is cleared by Start fresh, by turning saving off,
+// or after 24 hours with no change. Inside the dashboard it follows the dashboard's save switch (same browser storage).
+const SKEY='hmb.digState',ONKEY='hmb.tmpOn',AWAY=864e5,EMB=window.parent!==window;
+const lsGet=k=>{try{return localStorage.getItem(k)}catch(e){return null}};
+const lsSet=(k,v)=>{try{localStorage.setItem(k,v);return true}catch(e){return false}};
+const lsDel=k=>{try{localStorage.removeItem(k)}catch(e){}};
+const saveOn=()=>lsGet(ONKEY)!=='false';   // on unless turned off
+let savedAt=0,lastSaved='',saveT=null,saveErr='',freshArm=null;
+const snapshot=()=>({v:1,day:today(),files,manual,manOrders,typeOv,coOv,removedO,hold,oRecv,sRecv,oSeq,sSeq,rseq,fid,userOrder,orderPri,scope,view,plan,appliedIds,cfg,pend,pendQ});
+function restoreWork(){if(!saveOn())return;let s=null;try{s=JSON.parse(lsGet(SKEY)||'null')}catch(e){}
+  if(!s||s.v!==1)return;
+  if(!(Date.now()-(s.at||0)<AWAY)){lsDel(SKEY);return}                                  // untouched for a day: start clean
+  files=s.files||[];manual=s.manual||[];manOrders=s.manOrders||{};typeOv=s.typeOv||{};coOv=s.coOv||{};removedO=s.removedO||{};hold=s.hold||{};
+  oRecv=s.oRecv||{};sRecv=s.sRecv||{};oSeq=s.oSeq||{};sSeq=s.sSeq||{};rseq=s.rseq||0;fid=s.fid||0;
+  userOrder=s.userOrder||[];orderPri=s.orderPri||[];scope=s.scope||'recv';view=s.view=='num'?'num':'orders';
+  Object.assign(appliedIds,s.appliedIds||{});Object.assign(cfg,s.cfg||{});pend=s.pend||null;pendQ=s.pendQ||[];
+  if(s.day===today())plan=s.plan||'';                                                     // the over-41 choice is for one day only
+  savedAt=s.at;lastSaved=JSON.stringify(snapshot());
+  const C=compute(),nO=Object.keys(C.O).length,nS=Object.keys(C.S).length;
+  if(nO||nS)say('Picked up where you left off: '+nO+' order'+(nO==1?'':'s')+', '+nS+' sample'+(nS==1?'':'s')+', last saved '+fmt(isoT(s.at))+' at '+hm(s.at)+'.')}
+const isoT=ms=>{const d=new Date(ms);return iso(d)+'T'+pad(d.getHours())+':'+pad(d.getMinutes())};
+const hm=ms=>{const d=new Date(ms),h=d.getHours();return(h%12||12)+':'+pad(d.getMinutes())+(h<12?' AM':' PM')};
+function persist(){clearTimeout(saveT);saveT=setTimeout(saveNow,300)}
+function saveNow(){clearTimeout(saveT);if(!saveOn())return;const s=snapshot(),j=JSON.stringify(s);if(j===lastSaved)return;
+  if(!files.length&&!manual.length&&!Object.keys(manOrders).length&&!pend){lsDel(SKEY);lastSaved=j;savedAt=0;return renderSave()}   // nothing to keep
+  const at=Date.now(),body=JSON.stringify({...s,at});
+  if(body.length<4e6&&lsSet(SKEY,body)){lastSaved=j;savedAt=at;saveErr=''}
+  else saveErr='This is too much to keep in this browser, so it will not be remembered after a refresh. Remove files you no longer need under Extras, Loaded files.';
+  renderSave()}
+function renderSave(){const el=$('savest');if(!el)return;
+  if(!saveOn()){el.innerHTML=EMB?'Not remembered after a refresh: the dashboard’s save switch is off.':'Not remembered after a refresh. <button class="link" onclick="setSave(true)">Remember my work</button>';return}
+  el.innerHTML=(saveErr?'<span style="color:var(--red)">'+esc(saveErr)+'</span> ':'Remembered in this browser'+(savedAt?', saved at '+hm(savedAt):'')+'. Cleared after 24 hours with no changes. ')+
+    '<button class="link" id="freshBtn" onclick="startFresh()">'+(freshArm?'Tap again to clear everything':'Start fresh')+'</button>'+(EMB?'':' <button class="link" onclick="setSave(false)">Stop saving</button>')}
+function setSave(on){lsSet(ONKEY,on?'true':'false');if(on){lastSaved='';saveNow()}else{lsDel(SKEY);savedAt=0;lastSaved=''}renderSave()}
+// two taps, so one stray click cannot wipe a day of work
+function startFresh(){if(!freshArm){freshArm=setTimeout(()=>{freshArm=null;renderSave()},3000);return renderSave()}
+  clearTimeout(freshArm);freshArm=null;
+  manual=[];manOrders={};typeOv={};coOv={};removedO={};hold={};pendQ=[];files=[];oRecv={};sRecv={};expand=null;pend=null;msgs=[];fid=0;flt='';odate='';
+  oSeq={};sSeq={};rseq=0;userOrder=[];orderPri=[];upd=null;plan='';ph=null;Object.keys(appliedIds).forEach(k=>delete appliedIds[k]);
+  lsDel(SKEY);lastSaved='';savedAt=0;say('Started fresh. Everything from before is cleared.');render()}
+addEventListener('pagehide',saveNow);
+// the dashboard's switch or Clear log changes the same storage
+addEventListener('storage',e=>{if(e.key===ONKEY){if(saveOn()){lastSaved='';saveNow()}else{savedAt=0;lastSaved=''}renderSave()}});
+// ---------- rendering ----------
+const pill=(t,c)=>'<span class="pill '+(c||'')+'">'+esc(t)+'</span>';
+const q=s=>"'"+esc(s).replace(/\\/g,'\\\\')+"'";
+const XSVG='<svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false"><path d="M2 2l8 8M10 2l-8 8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
+const FILT={nr:o=>o.recv<o.total&&!o.held,wait:o=>o.L.some(s=>s.rec&&!s.dig&&!s.done),today:o=>o.L.some(s=>s.st.startsWith('Due today')),over:o=>o.L.some(s=>s.c=='r')};
+function render(){
+  renderPhoto();
+  const C=compute(),O=Object.values(C.O),S=Object.values(C.S);
+  $('today').textContent='Today is '+fmt(today());
+  $('vOrd').setAttribute('aria-pressed',view=='orders');$('vNum').setAttribute('aria-pressed',view=='num');
+  // errors stay until cleared; other messages show the last 6
+  const shown=msgs.map((m,i)=>[m,i]).filter(([m,i])=>m.k=='e'||i>=msgs.length-6).slice(-14);
+  $('msgs').innerHTML=shown.map(([m])=>'<div class="msg '+m.k+'">'+esc(m.t)+'</div>').join('')+(msgs.length?'<div><button class="link" onclick="msgs=[];render()">Clear messages</button></div>':'');
+  const tot=O.filter(o=>!o.held).reduce((a,o)=>a+o.total,0),rec=O.filter(o=>!o.held).reduce((a,o)=>a+o.recv,0);
+  const st=[['nr','Not received',tot-rec,''],['wait','Waiting for digestion',S.filter(s=>s.rec&&!s.dig&&!s.done).length,'y'],
+    ['today','Due today',S.filter(s=>s.st.startsWith('Due today')).length,'y'],['over','Overdue',S.filter(s=>s.c=='r').length,'r']];
+  $('stats').innerHTML=st.map(x=>'<button class="stat '+(x[2]?x[3]:'')+(flt==x[0]?' on':'')+'" onclick="flt=flt==\''+x[0]+'\'?\'\':\''+x[0]+'\';render()" aria-pressed="'+(flt==x[0])+'"><b>'+x[2]+'</b><span class="small">'+x[1]+' <span class="muted">samples</span></span></button>').join('');
+  // step 1
+  $('pend').innerHTML=pend?'<div class="box hi"><b>'+esc(pend.name)+'</b><span>'+pend.rows.length+' weighed samples. The file name has no date, so set the digestion date.</span>'+
+    '<div class="row"><input type="date" id="pdate" value="'+pend.date+'" onchange="pend.date=this.value"><button class="go" onclick="acceptDig()">Mark as digested</button><button onclick="pend=pendQ.shift()||null;render()">Skip this file</button>'+(pendQ.length?'<span class="muted small">'+pendQ.length+' more waiting</span>':'')+'</div></div>':'';
+  const cnt=k=>files.filter(f=>f.k==k).length;
+  $('loaded').textContent=files.length||manual.length?'Loaded: '+[[cnt('orders'),'orders file','orders files'],[cnt('samples'),'sample file','sample files'],[cnt('rg'),'Report Generator','Report Generators'],[cnt('dig'),'digestion log','digestion logs'],[manual.length,'sample added by hand','samples added by hand']].filter(x=>x[0]).map(x=>x[0]+' '+(x[0]>1?x[2]:x[1])).join(', ')+'.':'';
+  const mo=$('mo'),mv=mo.value,rank=orderRank(C.O);
+  mo.innerHTML='<option value="">From the sample number</option>'+O.slice().sort((a,b)=>rank.get(a.k)-rank.get(b.k)).map(o=>'<option value="'+esc(o.k)+'">'+esc(o.no)+(o.name?' · '+esc(o.name):'')+'</option>').join('');mo.value=C.O[mv]?mv:'';
+  $('cos').innerHTML=[...new Set(COMPANIES.concat(O.map(o=>o.name).filter(Boolean)))].sort().map(c=>'<option value="'+esc(c)+'">').join('');
+  $('manlist').innerHTML=vManual(C);renderManPrev();
+  // step 2
+  $('olist').innerHTML=vOrders(C,O);
+  // step 3
+  const P=logPlan();
+  $('logbox').innerHTML=vLog(P);$('logbtns').innerHTML=vBtns(P);
+  const iss=hdrIssues(),bad=iss.filter(x=>x.k=='e').length;
+  $('hdrsum').textContent='· analyst '+(H.analyst||'blank')+' · prep '+fmt(prep())+(bad?' · '+bad+' expired':iss.length?' · '+iss.length+' to check':'');
+  if(bad&&!hdrOpened){hdrOpened=true;$('hdr').open=true}
+  // extras
+  const rmN=Object.keys(removedO).length,heldN=O.filter(o=>o.held).length;
+  $('hidden').innerHTML='<div class="row">'+(rmN?'<span>'+rmN+' order(s) hidden.</span><button onclick="restoreRm()">Restore all</button>':'<span class="muted">No hidden orders.</span>')+(heldN?'<button onclick="rmHeld()">Hide the '+heldN+' not arriving today</button>':'')+'</div>';
+  const T={orders:'Orders',samples:'Samples',rg:'Report Generator',dig:'Digestion log'};
+  $('files').innerHTML=files.length?'<div class="scroll"><table><tr><th>File</th><th>Kind</th><th>Loaded</th><th>Rows</th><th></th></tr>'+files.map(f=>'<tr><td>'+esc(f.name)+'</td><td>'+T[f.k]+(f.ord?' · order '+esc(f.ord):'')+(f.date?' · '+fmt(f.date):'')+'</td><td class="n">'+fmtT(f.at)+'</td><td class="n">'+f.n+'</td><td><button onclick="rmFile('+f.id+')">Remove</button></td></tr>').join('')+'</table></div>':'<span class="muted">No files yet.</span>';
+  renderFind();announceOrders();renderSave();persist()}
+function vManual(C){if(!manual.length)return'';
+  const L=view=='num'?manual.slice().sort(cmpS):manual;
+  return '<div class="scroll" style="margin-top:6px"><table><tr><th>Added by hand</th><th>Order</th><th>Type</th><th>Received</th><th></th></tr>'+L.map(m=>{const s=C.S[m.id];
+    return '<tr><td class="n">'+esc(m.id)+'</td><td class="n">'+esc(m.order)+'</td><td><input type="text" class="tin" value="'+esc(m.type)+'" onchange="setManType('+q(m.id)+',this.value)" aria-label="Type for '+esc(m.id)+'"></td><td>'+
+      (s?(s.rec?'<span class="small">'+fmtT(s.rec)+'</span> <button class="link" onclick="undoSample('+q(m.id)+')">Undo</button>':'<button onclick="recvSample('+q(m.id)+')">Received</button>'):'<span class="muted small">'+(removedO[m.k]?'order hidden':'in a sample file')+'</span>')+
+      '</td><td><button class="x" onclick="rmManual('+q(m.id)+')" title="Remove" aria-label="Remove '+esc(m.id)+'">'+XSVG+'</button></td></tr>'}).join('')+'</table></div>'}
+function sampleRows(L,full){return L.map(s=>'<tr><td class="n">'+esc(s.id)+'</td>'+(full?'<td class="n">'+esc(s.ono||s.order)+'</td>':'')+'<td>'+esc(s.type)+'</td><td>'+
+  (s.rec?'<span class="small">'+fmtT(s.rec)+'</span> <button class="link" onclick="undoSample('+q(s.id)+')">Undo</button>':'<button onclick="recvSample('+q(s.id)+')">Received</button>')+
+  '</td><td>'+pill(s.st,s.c)+'</td></tr>').join('')}
+const sHead=full=>'<tr><th>Sample</th>'+(full?'<th>Order</th>':'')+'<th>Type</th><th>Received</th><th>Status</th></tr>';
+function renderFind(){const v=$('find').value.trim().toLowerCase();
+  if(!v){$('findres').innerHTML='';return}
+  const C=compute(),L=sortSamples(Object.values(C.S).filter(s=>(s.id+' '+s.ono).toLowerCase().includes(v)),C.O).slice(0,100);
+  $('findres').innerHTML=L.length?'<div class="scroll"><table>'+sHead(true)+sampleRows(L,true)+'</table></div>':'<span class="muted">No sample matches.</span>'}
+function vOrders(C,O){
+  if(!O.length)return'<p class="muted">Your orders show up here after you add files or samples in step 1. Mark each order received as it arrives.</p>';
+  const dates=[...new Set(O.map(o=>o.placed||''))].sort().reverse(),rank=orderRank(C.O);
+  const list=O.filter(o=>(!odate||(o.placed||'')==odate)&&(!flt||FILT[flt](o))).sort((a,b)=>(a.held-b.held)||(rank.get(a.k)-rank.get(b.k)));
+  const names={nr:'not received',wait:'waiting for digestion',today:'due today',over:'overdue'};
+  const arrOn=view=='orders',G=groupsOf(list.filter(o=>!o.held)),gi={};GRL.a=G;
+  G.forEach((g,i)=>{GRP['a'+i]=g.orders.map(o=>o.k);g.orders.forEach((o,j)=>{gi[o.k]={id:'a'+i,first:!j,n:i+1,name:g.name||o.no}})});
+  const multiDay=new Set(G.map(g=>g.day)).size>1;
+  let h='<div class="row"><label for="odate" class="small">Placed</label><select id="odate" onchange="odate=this.value;render()"><option value="">All dates</option>'+dates.map(d=>'<option value="'+d+'"'+(d==odate?' selected':'')+'>'+(d?fmt(d):'No date')+'</option>').join('')+'</select>'+
+    '<span class="muted small">'+list.length+' of '+O.length+' orders, '+(view=='num'?'by order number':'by company in delivery order'+(EMB?', the same line-up as the calendar':'')+'. Drag a company or use its arrows to change the order, and the log follows')+(flt?', showing '+names[flt]+' <button class="link" onclick="flt=\'\';render()">Show all</button>':'')+'</span></div>'+
+    '<div class="scroll"><table class="ot"><colgroup><col style="width:30%"><col style="width:13%"><col style="width:16%"><col></colgroup><tr><th>Company</th><th>Received</th><th>Status</th><th></th></tr>';
+  let heldHead=false,lastDay=null;
+  list.forEach(o=>{const K=q(o.k),g=arrOn?gi[o.k]:null;
+    if(o.held&&!heldHead){heldHead=true;h+='<tr class="date"><td colspan="4">Not arriving today</td></tr>'}
+    if(!o.held&&multiDay&&dayOf(o)!==lastDay){lastDay=dayOf(o);h+='<tr class="date"><td colspan="4">'+esc(dayLbl(lastDay))+'</td></tr>'}
+    const drag=g?' draggable="true" ondragstart="dgG(event,\''+g.id+'\')" ondragover="dgOver(event)" ondragleave="dgLeave(event)" ondrop="dropG(event,\''+g.id+'\')"':'';
+    const co=editCo===o.k||!o.name?'<input type="text" class="tin" list="cos" value="'+esc(o.name)+'" placeholder="Company?" onchange="setCo('+K+',this.value)" aria-label="Company for order '+esc(o.no)+'">':'<button class="coname" onclick="editCo='+K+';render()" title="Change the company">'+esc(o.name)+'</button>';
+    h+='<tr class="'+(o.held?'held':'')+(g?' drag':'')+'"'+drag+'><td><div class="corow">'+(g?'<span class="grip" aria-hidden="true">⠿</span><b class="gno">'+(g.first?g.n:'')+'</b>':'')+'<div>'+co+'<br><span class="muted small num">'+esc(o.no)+(o.placed?' · placed '+fmtS(o.placed):'')+'</span></div></div></td>'+
+    '<td class="n">'+o.recv+' / '+o.total+(o.oRec?'<br><span class="muted small">'+fmtT(o.oRec)+'</span>':'')+'</td><td>'+pill(o.st,o.c)+'</td><td><div class="acts">'+
+    (g&&g.first?'<button class="ic" onclick="arrNudgeG(\''+g.id+'\',-1)" aria-label="Move '+esc(g.name)+' up">'+UPSVG+'</button><button class="ic" onclick="arrNudgeG(\''+g.id+'\',1)" aria-label="Move '+esc(g.name)+' down">'+DNSVG+'</button>':'')+
+    (o.oRec?'<button onclick="undoOrder('+K+')">Undo received</button>':'<button class="go" onclick="recvOrder('+K+')">Received</button>'+
+      (hold[o.k]==C.T?'<button onclick="unholdOrder('+K+')">Arriving today</button>':'<button onclick="holdOrder('+K+')">Not today</button>'))+
+    '<button onclick="expand=expand=='+K+'?null:'+K+';render()" aria-expanded="'+(expand==o.k)+'">'+(expand==o.k?'Hide':'Samples')+'</button><button class="x" onclick="rmOrder('+K+')" title="Remove this order (a mistaken upload)" aria-label="Remove order '+esc(o.no)+'">'+XSVG+'</button></div></td></tr>';
+    if(expand==o.k)h+='<tr class="sub"><td colspan="4"><div class="row" style="margin-bottom:6px"><button onclick="upSFor('+K+')">Upload sample file</button><button onclick="flStart('+K+')">Flash samples</button><button onclick="rmOrder('+K+')">Hide order</button><span class="muted small">'+o.loaded+' of '+o.total+' sample numbers loaded. Use the Received button on a single sample to fix a mistake.</span></div>'+
+      (o.L.length?'<table>'+sHead()+sampleRows(sortSamples(o.L,C.O))+'</table>':'')+'</td></tr>'});
+  return h+'</table></div>'+(list.length?'':'<p class="muted">No orders match this filter.</p>')}
+function upSFor(k){const o=compute().O[k];pick('.csv',f=>impSamples(f,o.no))}
+// ---------- drag and drop: reorder samples, or a whole order ----------
+function curIds(){return logSamples().L.map(x=>x.id)}
+function moveSample(id,before){const L0=logSamples().L,me=L0.find(x=>x.id===id),tg=L0.find(x=>x.id===before);if(me&&tg&&me.order!==tg.order)return;   // single samples move inside their own order; move the order itself to move them all
+  const ids=curIds().filter(x=>x!==id);const i=before?ids.indexOf(before):-1;if(i<0)ids.push(id);else ids.splice(i,0,id);userOrder=ids;render()}
+function ordList(){const L=logSamples().L,r=[];L.forEach(x=>{let b=r.find(k=>k.o===x.order);if(!b)r.push(b={o:x.order,n:0,company:x.company,placed:x.placed});b.n++});return r}
+function moveOrder(ord,before){const rest=ordList().map(k=>k.o).filter(o=>o!==ord);
+  const i=before==null?-1:rest.indexOf(before);if(i<0)rest.push(ord);else rest.splice(i,0,ord);orderPri=rest;render()}
+function nudgeOrder(o,d){const a=ordList().map(k=>k.o),i=a.indexOf(o),j=i+d;if(i<0||j<0||j>=a.length)return;[a[i],a[j]]=[a[j],a[i]];orderPri=a;render()}
+function nudge(id,d){const ids=curIds(),i=ids.indexOf(id),j=i+d;if(i<0||j<0||j>=ids.length)return;[ids[i],ids[j]]=[ids[j],ids[i]];userOrder=ids;render()}
+const dgS=(e,id)=>{dragId=id;dragOrd=null;e.dataTransfer.effectAllowed='move';try{e.dataTransfer.setData('text/plain',id)}catch(x){}};
+const dgO=(e,o)=>{dragOrd=o;dragId=null;e.dataTransfer.effectAllowed='move';try{e.dataTransfer.setData('text/plain',o)}catch(x){}};
+const dgOver=e=>{if(dragId||dragOrd!==null||dragGrp){e.preventDefault();e.currentTarget.classList.add('dz')}};
+const dgG=(e,id)=>{dragGrp=id;dragId=null;dragOrd=null;e.dataTransfer.effectAllowed='move';try{e.dataTransfer.setData('text/plain',id)}catch(x){}};
+const dropG=(e,id)=>{e.preventDefault();e.currentTarget.classList.remove('dz');if(dragGrp&&dragGrp!==id)arrMove(GRP[dragGrp],id?(GRP[id]||[])[0]:null);dragGrp=null};
+const dgLeave=e=>e.currentTarget.classList.remove('dz');
+const dropS=(e,id)=>{e.preventDefault();e.currentTarget.classList.remove('dz');if(dragId&&dragId!==id)moveSample(dragId,id);else if(dragOrd!==null){const x=logSamples().L.find(y=>y.id===id);if(x&&x.order!==dragOrd)moveOrder(dragOrd,x.order)}dragId=dragOrd=null};
+const dropEnd=e=>{e.preventDefault();e.currentTarget.classList.remove('dz');if(dragOrd!==null)moveOrder(dragOrd,null);dragId=dragOrd=null};
+const dropO=(e,o)=>{e.preventDefault();e.currentTarget.classList.remove('dz');if(dragOrd!==null&&dragOrd!==o)moveOrder(dragOrd,o);dragId=dragOrd=null};
+const UPSVG='<svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false"><path d="M6 10V2.5M2.5 6L6 2.5L9.5 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const DNSVG='<svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false"><path d="M6 2v7.5M2.5 6L6 9.5L9.5 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+// which orders the carried samples come from; "part" = the rest of that order is in today's log
+function carryText(f){const by=[],today_=new Set(f.L.map(s=>s.order));f.carry.forEach(s=>{let b=by.find(x=>x.o===s.order);if(!b)by.push(b={o:s.order,n:0});b.n++});
+  return f.carry.length+' sample'+(f.carry.length==1?'':'s')+' carried to the next day'+(by.length?': '+by.map(b=>b.o+' ('+b.n+(today_.has(b.o)?', rest of the order is today':'')+')').join(', '):'')}
+// over 41 tubes: two runs today, or one run today and the rest carried over. ctx = {count, need} when adding to an existing log
+function planBox(L,tubes,ctx){const base=ctx?ctx.count:0,need=ctx?ctx.need:undefined,o=ctx?{update:true}:undefined;
+  const runs=bestRuns(tubes),blanks=runs.reduce((a,b)=>a+b,0)-tubes;
+  const card=(v,title,body)=>'<label class="plan'+(plan==v?' on':'')+'"><input type="radio" name="plan'+(ctx?'u':'')+'" '+(plan==v?'checked ':'')+'onchange="setPlan(\''+v+'\')"><span><b>'+esc(title)+'</b><br><span class="small">'+esc(body)+'</span></span></label>';
+  let h='<div class="box hi"><div><b>'+tubes+' tubes is more than one rotor load (41).</b> '+(ctx?'That counts the '+base+' already in the log. ':'')+'<span class="small">'+(plan?'Blanks and dups are set once for the day.':'Choose one before you make the log.')+'</span></div><div class="plans">'+
+    card('two','Two runs today','Everything goes in '+(ctx?'the log':'this log')+'. Suggested runs: '+runs.join(' + ')+(blanks?', with '+blanks+' balance blank'+(blanks==1?'':'s'):'')+'. Visualize Batch lays out each run.');
+  [41,32].forEach(size=>{const cap=size-base;
+    if(cap<=0){h+=card('c'+size,'One run of '+size+' today','The log already has '+base+' tubes, so nothing more fits in a run of '+size+'.');return}
+    const f=fitPrefix(L,cap,need,o),t=base+tubesOf(f.L,need,o);
+    h+=card('c'+size,'One run of '+size+' today, carry the rest',(f.L.length?f.L.length+' sample'+(f.L.length==1?'':'s')+' '+(ctx?'added, ':'+ blanks and dups = ')+t+' tubes'+(t<size?' (pad with '+(size-t)+' balance blank'+(size-t==1?'':'s')+')':'')+'. ':'Nothing more fits. ')+carryText(f)+'.')});
+  return h+'</div></div>'}
+function vLog(P){const L=P.all,T=P.L,p=T.filter(s=>!isC(s)).length,c=T.length-p,arr=view=='orders';
+  let h='<div class="row">'+[['recv','sc1','Only received orders'],['today','sc0','Today\'s samples'],['all','sc2','Everything not digested']].map(x=>'<label class="row"><input type="radio" name="scope" id="'+x[1]+'" '+(scope==x[0]?'checked':'')+' onchange="scope=\''+x[0]+'\';render()"> '+x[2]+'</label>').join('')+'</div>'+
+    '<div class="row"><span class="small">Concentrates</span><div class="segs" role="group" aria-label="Where concentrates go"><button id="zOrd" aria-pressed="'+!concZone+'" onclick="setZone(false)">Keep orders together</button><button id="zCon" aria-pressed="'+concZone+'" onclick="setZone(true)">Concentrates in their own zone</button></div></div>';
+  h+='<p><b class="num">'+L.length+'</b> samples ready'+(L.length?(P.carry.length?', <b class="num">'+T.length+'</b> in today\'s log':'')+': '+p+' plant material, '+c+' concentrates'+(concZone?', flower first and then concentrates, each in order of orders':', in order of orders, concentrates kept with their order')+(view=='num'?', by sample number inside each order.':'.'):'.')+(P.rejected.length?' <span class="muted">'+P.rejected.length+' topical/edible left out.</span>':'')+'</p>';
+  if(!L.length)return h;
+  h+=P.over?planBox(L,P.tubes):'<p class="muted small">'+P.tubes+' tubes with blanks and dups. That fits one rotor run (41).</p>';
+  const tw=findDups(buildRows(T).map(r=>r.id)),twK=new Set(tw.map(x=>dupKey(x.id)));
+  if(tw.length)h+='<div class="msg e"><b>Listed twice in this log:</b> '+esc(dupText(tw))+'. Remove the extra copy (Extras, Loaded files or Added by hand) before making the log.</div>';
+  if(P.guess.length)h+='<div class="box"><b>No type for '+P.guess.length+' sample'+(P.guess.length==1?'':'s')+'.</b><span class="small">The number has no _P_ or _C_, so it counts as a concentrate until you set a type.</span>'+
+    P.guess.map(id=>'<div class="row"><span class="num">'+esc(id)+'</span><input type="text" class="tin" placeholder="Flower, Live Resin…" onchange="setTypeOv('+q(id)+',this.value)" aria-label="Type for '+esc(id)+'"></div>').join('')+'</div>';
+  const ords=ordList();
+  const tip=k=>(k.company?k.company+'\n':'')+'Order '+k.o+(k.placed?'\nPlaced '+fmt(k.placed):'')+'\n'+k.n+' sample'+(k.n>1?'s':'');
+  const rows=buildRows(T),ordOf={},coOf={},tipOf={};ords.forEach(k=>tipOf[k.o]=tip(k));L.forEach(s=>{ordOf[s.id]=s.order;coOf[s.id]=s.company});
+  const CO=compute().O,cnt={},lo=[];ords.forEach(k=>{const o=CO[nk(k.o)];if(o){cnt[o.k]=k.n;lo.push(o)}});
+  const G=groupsOf(lo),multiDay=new Set(G.map(g=>g.day)).size>1;GRL.b=G;let lastDay=null;
+  h+='<div class="box"><b>Order of the log</b><p class="muted small">'+(EMB?'The same line-up as the calendar on the dashboard: one row per company, in delivery order. Drag a company or use the arrows, here, in step 2 or on the calendar, and the log follows.':'One row per company. Drag a company by its handle or use the arrows, and the log follows.')+'</p>'+
+    '<div class="olist2" aria-label="Companies in log order">'+G.map((g,i)=>{const gid='b'+i;GRP[gid]=g.orders.map(o=>o.k);const n=g.orders.reduce((a,o)=>a+(cnt[o.k]||0),0);
+      const head=multiDay&&g.day!==lastDay?'<div class="dayh">'+esc(dayLbl(lastDay=g.day))+'</div>':'';
+      return head+'<div class="orow" draggable="true" title="'+esc(g.orders.map(o=>tipOf[o.no]||o.no).join('\n\n'))+'" ondragstart="dgG(event,\''+gid+'\')" ondragover="dgOver(event)" ondragleave="dgLeave(event)" ondrop="dropG(event,\''+gid+'\')"><span class="grip" aria-hidden="true">⠿</span><b class="num">'+(i+1)+'</b><span class="oname"><b>'+esc(g.name||'No company yet')+'</b> <span class="muted small num">'+g.orders.map(o=>esc(o.no)).join(', ')+'</span></span><span class="muted small">'+n+' sample'+(n==1?'':'s')+'</span><span class="acts"><button class="ic" onclick="arrNudgeG(\''+gid+'\',-1)" aria-label="Move '+esc(g.name||'this order')+' up">'+UPSVG+'</button><button class="ic" onclick="arrNudgeG(\''+gid+'\',1)" aria-label="Move '+esc(g.name||'this order')+' down">'+DNSVG+'</button></span></div>'}).join('')+
+    '<div class="orow endz" ondragover="dgOver(event)" ondragleave="dgLeave(event)" ondrop="dropG(event,null)">Drop here to move a company to the end</div></div>';
+  h+='<div class="box"><b>Preview of '+(P.carry.length?'today\'s':'the new')+' log</b><p class="muted small">Blanks and duplicates are placed for you.'+(arr?' To move one sample inside its order, drag its row or use its arrows.':'')+'</p>'+
+    '<div class="scroll" style="max-height:420px;overflow-y:auto"><table><tr><th>#</th><th>Sample</th><th>Type</th><th>Company</th><th>Weight</th><th></th></tr>'+
+    rows.map((r,i)=>{const tw=twK.has(dupKey(r.id)),qc=/^blank\s*[xy]/i.test(r.id)||/_dup$/i.test(r.id),grp=(tw?' <span class="pill r">listed twice</span>':'')+' <span class="muted small">'+(isC(r)?'conc':'plant')+'</span>';
+      return qc?'<tr class="qc"><td class="n">'+(i+1)+'</td><td class="n">'+esc(r.id)+'</td><td>'+esc(r.type)+'</td><td class="muted small">'+(/_dup$/i.test(r.id)?'duplicate':'blank')+'</td><td class="n">'+(r.w??'')+'</td><td></td></tr>'
+      :'<tr'+(arr?' class="drag" draggable="true" ondragstart="dgS(event,'+q(r.id)+')" ondragover="dgOver(event)" ondragleave="dgLeave(event)" ondrop="dropS(event,'+q(r.id)+')"':'')+'><td class="n">'+(i+1)+'</td><td class="n">'+(arr?'⠿ ':'')+esc(r.id)+'</td><td>'+esc(r.type)+grp+'</td><td title="'+esc(tipOf[ordOf[r.id]]||'')+'">'+esc(coOf[r.id]||ordOf[r.id]||'')+'</td><td class="n"></td><td>'+(arr?'<button class="ic" onclick="nudge('+q(r.id)+',-1)" aria-label="Move up">'+UPSVG+'</button><button class="ic" onclick="nudge('+q(r.id)+',1)" aria-label="Move down">'+DNSVG+'</button>':'')+'</td></tr>'}).join('')+'</table></div>'+
+    ((userOrder.length||orderPri.length||EMB)?'<div><button class="link" onclick="arrReset()">Reset to '+(EMB?'delivery times':'received order')+'</button></div>':'')+'</div>';
+  if(P.carry.length)h+=carryBox(P.carry);
+  return h}
+const carryBox=L=>'<div class="box"><b>Carried to the next day ('+L.length+')</b><p class="muted small">Left out of this log. They stay on the list as waiting for digestion, so they come up again in the next log.</p><div class="chips">'+L.map(s=>'<span class="ochip">'+esc(s.id)+'</span>').join('')+'</div></div>';
+function vBtns(P){const tw=findDups(buildRows(P.L).map(r=>r.id)),iss=hdrIssues().concat(tw.length?[{k:'e',t:'Listed twice in this log: '+dupText(tw)+'.',tw:1}]:[]),bad=iss.some(x=>x.k=='e'),emb=window.parent!==window,ok=P.L.length&&P.ready&&!hdrBlocked();
+  let h=iss.length?'<div class="msgs" style="margin-bottom:8px">'+iss.map(x=>'<div class="msg '+x.k+'">'+esc(x.t)+(x.k=='e'&&!x.tw?' Update it under Log header.':'')+'</div>').join('')+'</div>':'';
+  if(iss.some(x=>x.k=='e'&&!x.tw))h+='<label class="row small" style="margin-bottom:8px"><input type="checkbox" '+(hdrAck?'checked ':'')+'onchange="hdrAck=this.checked;render()"> Make the log anyway</label>';
+  if(P.all.length&&!P.ready)h+='<p class="small" style="margin-bottom:8px"><b>Choose two runs or carry over above</b> before making the log.</p>';
+  h+='<div class="row"><button class="go big" onclick="expLog()"'+(ok?'':' disabled')+'>Download new log</button>'+(emb?'<button class="big" onclick="populate()"'+(ok?'':' disabled')+' title="Send this log to the dashboard without downloading it">Populate</button>':'')+'<button class="big" onclick="updPick()">Add to an existing log…</button></div>'+
+    '<p class="muted small">'+(concZone?'A new log has Blank X before the flower and Blank Y before the concentrates.':'A new log starts with Blank X (flower) and Blank Y (concentrates).')+' Each _dup sits right after its original: the first flower, and the first concentrate (Badder/Budder, then Live Rosin, then Distillate). Adding to an existing log offers the samples in the group chosen above that are not in that log yet, and you pick which to add. Blank Y goes at the end right before the new concentrates, and a blank or _dup is only added when that kind is not in the log yet. Weights, other cells and other sheets stay as they are.</p>';
+  if(upd)h+=vUpd();
+  return h}
+function vUpd(){const u=upd,c=updCalc(),r=c.rows;
+  let h='<div class="box hi"><div class="row" style="justify-content:space-between"><b>Adding to '+esc(u.name)+'</b><span class="muted small">'+u.count+' tube'+(u.count==1?'':'s')+' already in it, last one in row '+(u.last+1)+'</span></div>'+
+    (u.twice&&u.twice.length?'<div class="msg e">Listed twice in this log: '+esc(dupText(u.twice,'row '))+'.</div>':'')+
+    (u.unknown.length?'<div class="msg w">'+u.unknown.length+' sample(s) in this log are not in any loaded order: '+esc(u.unknown.slice(0,15).join(', '))+(u.unknown.length>15?'…':'')+'</div>':'');
+  if(!c.cand.length){const{S}=compute(),nr=Object.values(S).filter(s=>!s.dig&&!s.done&&!s.rec&&!u.have[dk(s.id)]).length;
+    h+='<p>Nothing to add. Every sample in the group chosen above is already in this log.'+(nr&&scope=='recv'?' <b>'+nr+' loaded sample'+(nr==1?' is':'s are')+' not marked received.</b> Mark them received in step 2, or choose Everything not digested above.':' Add the sample file in step 1 if new samples are missing.')+'</p>'}
+  else{
+    h+='<p class="small"><b>Samples to add</b> ('+c.cand.filter(s=>!u.off.has(s.id)).length+' of '+c.cand.length+' picked) · <button class="link" onclick="updAll(true)">All</button> <button class="link" onclick="updAll(false)">None</button></p>'+
+      '<div class="scroll" style="max-height:260px;overflow-y:auto"><table><tr><th></th><th>Sample</th><th>Order</th><th>Type</th></tr>'+c.cand.map(s=>'<tr><td><input type="checkbox" '+(u.off.has(s.id)?'':'checked ')+'onchange="updToggle('+q(s.id)+',this.checked)" aria-label="Add '+esc(s.id)+'"></td><td class="n">'+esc(s.id)+'</td><td class="n">'+esc(s.order)+'</td><td>'+esc(s.type)+'</td></tr>').join('')+'</table></div>';
+    if(c.over)h+=planBox(c.cand.filter(s=>!u.off.has(s.id)),c.total,{count:u.count,need:u.need});
+    h+=r.length?'<p>'+r.length+' row'+(r.length==1?'':'s')+' will be added at rows '+r[0].row+' to '+r[r.length-1].row+'. The log will have '+c.after+' tubes. New weights stay blank except the blanks.</p>':'<p class="muted">Nothing picked yet.</p>';
+    if(c.extra)h+='<div class="msg w">The log’s numbered rows run out, so '+c.extra+' extra row(s) are added below them with the same formatting.</div>';
+    if(r.length)h+='<div class="scroll"><table><tr><th>Row</th><th>Sample</th><th>Type</th><th>Weight</th></tr>'+r.map(x=>'<tr'+(/^blank\s*[xy]/i.test(x.id)||/_dup$/i.test(x.id)?' class="qc"':'')+'><td class="n">'+x.row+'</td><td class="n">'+esc(x.id)+'</td><td>'+esc(x.type)+'</td><td class="n">'+(x.w??'')+'</td></tr>').join('')+'</table></div>';
+    if(c.carry.length)h+=carryBox(c.carry)}
+  return h+'<div class="row">'+(r.length?'<button class="go" onclick="updSave()"'+(c.ready?'':' disabled')+'>Download updated log</button>':'')+'<button onclick="upd=null;render()">Cancel</button></div></div>'}
+restoreWork();renderHdr();render();
+</script>
